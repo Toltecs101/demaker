@@ -1,0 +1,1974 @@
+<!DOCTYPE html>
+<!--
+  Demaker: turn any FBX into a PS1-style asset, in the browser.
+  Single file, no build step. MIT License, (c) 2026 VOIDMONKX.
+  Libraries: three.js (MIT) and meshoptimizer (MIT), loaded from jsDelivr.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demaker: turn any FBX into a PS1-style model</title>
+<meta name="description" content="Free browser tool that turns any FBX into a PS1-style model: a low-poly mesh, one small paletted texture, rig and animations kept. Exports .glb. Nothing is uploaded.">
+<link rel="canonical" href="https://toltecs101.github.io/demaker/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Demaker: FBX in, 32-bit out">
+<meta property="og:description" content="Free browser tool that turns any FBX into a PS1-style model: a low-poly mesh, one small paletted texture, rig and animations kept. Exports .glb. Nothing is uploaded.">
+<meta property="og:url" content="https://toltecs101.github.io/demaker/">
+<meta property="og:image" content="https://toltecs101.github.io/demaker/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Demaker: FBX in, 32-bit out">
+<meta name="twitter:description" content="Free browser tool that turns any FBX into a PS1-style model: a low-poly mesh, one small paletted texture, rig and animations kept. Exports .glb. Nothing is uploaded.">
+<meta name="twitter:image" content="https://toltecs101.github.io/demaker/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23cbcac4'/%3E%3Crect x='5' y='6' width='22' height='16' rx='3' fill='%23090a0f' stroke='%2326272d' stroke-width='2'/%3E%3Ccircle cx='8' cy='26.5' r='2' fill='%233fdc86'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Michroma&family=Silkscreen&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+<style>
+:root {
+  /* One visual world: the grey ABS shell of a 1994 console. Sticky screen on top, control deck below; two columns from 980px. */
+  --shell: #cbcac4;
+  --shell-hi: #e6e5df;
+  --shell-lo: #a9a8a1;
+  --ink: #1e1f25;
+  --ink-soft: #5a5a5f;
+  --glass: #090a0f;
+  --signal: #d4401c;
+  --led: #3fdc86;
+  --font-display: "Michroma", "Eurostile", "Arial Black", sans-serif;
+  --font-body: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-osd: "Silkscreen", ui-monospace, "Courier New", monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { background: var(--shell); }
+html, body { min-height: 100%; margin: 0; }
+body {
+  background: var(--shell);
+  color: var(--ink);
+  font: 400 15px/1.35 var(--font-body);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+#app { max-width: 1240px; margin: 0 auto; padding: 0 16px 28px; }
+
+/* ---------- header ---------- */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0 10px; }
+.brand h1 { margin: 0; font: 400 19px/1 var(--font-display); letter-spacing: .2em; text-shadow: 0 1px 0 var(--shell-hi); }
+.brand p { margin: 5px 0 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); }
+
+.key {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 38px; padding: 0 14px;
+  border: 1px solid #8b8a84; border-radius: 6px;
+  background: linear-gradient(180deg, #e9e8e2, #d2d1cb);
+  box-shadow: 0 1px 0 var(--shell-hi), inset 0 1px 0 #f6f5f0;
+  font-weight: 600; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  user-select: none;
+}
+.key:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(0,0,0,.25); }
+.key.go { background: linear-gradient(180deg, #e2532c, #c2380f); border-color: #8e2a0c; color: #fff; box-shadow: 0 1px 0 var(--shell-hi), inset 0 1px 0 #f08a66; }
+.key[disabled] { opacity: .5; cursor: default; }
+
+/* ---------- screen ---------- */
+.stage { position: sticky; top: 0; z-index: 5; padding: 6px 0 8px; background: var(--shell); box-shadow: 0 6px 8px -8px rgba(0,0,0,.45); }
+.crt {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; margin: 0 auto;
+  background: var(--glass); border: 5px solid #26272d; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 1px 0 var(--shell-hi), 0 0 0 1px #111;
+}
+.crt canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.osd {
+  position: absolute; left: 8px; top: 7px; right: 8px; pointer-events: none;
+  font: 400 10px/1.5 var(--font-osd); color: #f0efe6; text-shadow: 1px 1px 0 #000; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums; white-space: pre-wrap;
+}
+.osd b { font-weight: 400; color: #ffd166; }
+.osd .tag { position: absolute; right: 0; top: 0; padding: 0 5px; background: #f0efe6; color: #111; text-shadow: none; }
+.veil {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px;
+  background: rgba(9,10,15,.82); color: #f0efe6; font: 400 12px/1.7 var(--font-osd);
+}
+.veil[hidden] { display: none; }
+.veil.drop { outline: 2px dashed #f0efe6; outline-offset: -10px; }
+
+.strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+.msg { order: 3; flex: 1 1 100%; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.led { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--led); box-shadow: 0 0 5px var(--led), inset 0 -1px 1px rgba(0,0,0,.3); }
+.led.busy { background: #ffb020; box-shadow: 0 0 5px #ffb020; animation: blink .5s steps(2) infinite; }
+.led.err { background: #ff4a3d; box-shadow: 0 0 5px #ff4a3d; }
+@keyframes blink { 50% { opacity: .25; } }
+#status { flex: 1; min-width: 0; font-size: 13px; line-height: 1.3; color: var(--ink-soft); overflow-wrap: anywhere; }
+.strip .key { min-height: 32px; padding: 0 12px; font-size: 12px; }
+.key[aria-pressed="true"] { background: var(--ink); border-color: #000; color: #f3f2ec; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); }
+
+/* segmented keys */
+.seg { display: inline-flex; border: 1px solid #8b8a84; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 0 var(--shell-hi); }
+.seg button {
+  min-height: 34px; padding: 0 10px; border: 0; border-left: 1px solid #a3a29b;
+  background: linear-gradient(180deg, #e9e8e2, #d5d4ce);
+  font-weight: 500; font-size: 13px; letter-spacing: .03em; white-space: nowrap;
+}
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: #f3f2ec; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); }
+.seg.wide { display: flex; }
+.seg.wide button { flex: 1 1 0; padding: 0 4px; }
+.strip .seg button { min-height: 32px; font-size: 12px; text-transform: uppercase; font-weight: 600; }
+
+/* ---------- deck ---------- */
+.deck { padding-top: 6px; }
+.group { padding: 14px 0 6px; border-top: 1px solid var(--shell-lo); box-shadow: inset 0 1px 0 var(--shell-hi); }
+.group:first-child { border-top: 0; box-shadow: none; padding-top: 8px; }
+.group > h2 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  margin: 0 0 10px; font: 400 10px/1 var(--font-display); letter-spacing: .26em; text-transform: uppercase;
+  color: #4a4a4f; text-shadow: 0 1px 0 var(--shell-hi);
+}
+.group > h2 small { font: 400 12px/1 var(--font-body); letter-spacing: .02em; text-transform: none; color: var(--ink-soft); text-shadow: none; }
+
+.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.presets button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  min-height: 52px; padding: 7px 8px; text-align: left;
+  border: 1px solid #8b8a84; border-radius: 6px; background: linear-gradient(180deg, #e9e8e2, #d5d4ce);
+  box-shadow: 0 1px 0 var(--shell-hi), inset 0 1px 0 #f6f5f0;
+}
+.presets button b { font-weight: 600; font-size: 14px; letter-spacing: .02em; }
+.presets button span { font-size: 11px; line-height: 1.15; color: var(--ink-soft); }
+.presets button[aria-pressed="true"] { background: var(--ink); border-color: #000; box-shadow: inset 0 2px 5px rgba(0,0,0,.6); }
+.presets button[aria-pressed="true"] b { color: #fff; }
+.presets button[aria-pressed="true"] span { color: #b9b8b2; }
+
+.row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 6px 10px; margin-bottom: 10px; }
+.row > label, .row > .lab { font-size: 14px; font-weight: 500; }
+.row .val { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-size: 13px; white-space: nowrap; }
+.slide { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.slide .val { flex: none; min-width: 54px; text-align: right; }
+.hint { grid-column: 2; margin: -4px 0 0; font-size: 12px; line-height: 1.3; color: var(--ink-soft); }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 30px; margin: 0; background: transparent; --p: 50%;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 4px; border: 1px solid #77766f;
+  background: linear-gradient(90deg, var(--ink) var(--p), #b5b4ad var(--p)); box-shadow: 0 1px 0 var(--shell-hi), inset 0 1px 2px rgba(0,0,0,.35);
+}
+input[type="range"]::-moz-range-track {
+  height: 8px; border-radius: 4px; border: 1px solid #77766f;
+  background: linear-gradient(90deg, var(--ink) var(--p), #b5b4ad var(--p)); box-shadow: 0 1px 0 var(--shell-hi), inset 0 1px 2px rgba(0,0,0,.35);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 26px; margin-top: -10px; border-radius: 4px;
+  border: 1px solid #55544e; background: linear-gradient(90deg, #efeee8 0 7px, var(--signal) 7px 9px, #efeee8 9px);
+  box-shadow: 0 2px 3px rgba(0,0,0,.35), inset 0 1px 0 #fff;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 24px; border-radius: 4px;
+  border: 1px solid #55544e; background: linear-gradient(90deg, #efeee8 0 7px, var(--signal) 7px 9px, #efeee8 9px);
+  box-shadow: 0 2px 3px rgba(0,0,0,.35), inset 0 1px 0 #fff;
+}
+
+.switch { display: inline-flex; align-items: center; gap: 10px; min-height: 34px; padding: 0; border: 0; background: none; font-size: 13px; line-height: 1.25; text-align: left; color: var(--ink-soft); }
+.switch i { flex: none; }
+.switch i { position: relative; width: 40px; height: 22px; border-radius: 11px; border: 1px solid #77766f; background: #b5b4ad; box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 1px 0 var(--shell-hi); }
+.switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #efeee8; border: 1px solid #55544e; transition: left .12s; }
+.switch[aria-checked="true"] i { background: var(--ink); }
+.switch[aria-checked="true"] i::after { left: 20px; background: var(--led); border-color: #0d5c33; }
+
+select { min-height: 34px; padding: 0 8px; border: 1px solid #8b8a84; border-radius: 6px; background: #e9e8e2; max-width: 100%; }
+
+/* texture page + CLUT readout */
+.page { display: flex; gap: 12px; align-items: flex-start; margin: 2px 0 12px; }
+.page canvas { flex: none; width: 96px; height: 96px; image-rendering: pixelated; background: #111 repeating-conic-gradient(#2a2a2e 0 25%, #1a1a1e 0 50%) 0 0 / 12px 12px; border: 3px solid #26272d; border-radius: 4px; }
+.page .meta { min-width: 0; flex: 1; font-size: 12px; color: var(--ink-soft); }
+.page .meta strong { display: block; font-size: 13px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.clut { display: grid; grid-template-columns: repeat(16, 1fr); gap: 1px; margin-top: 6px; padding: 2px; background: #26272d; border-radius: 3px; }
+.clut i { aspect-ratio: 1; }
+.clut.big { grid-template-columns: repeat(32, 1fr); gap: 0; }
+.clut[hidden] { display: none; }
+
+.export { padding: 14px 0 4px; border-top: 1px solid var(--shell-lo); box-shadow: inset 0 1px 0 var(--shell-hi); }
+.export .key { width: 100%; min-height: 48px; font-size: 16px; letter-spacing: .08em; }
+.note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--ink-soft); }
+details { margin-top: 12px; font-size: 13px; line-height: 1.45; color: #3c3c41; }
+details summary { cursor: pointer; font-weight: 600; min-height: 30px; }
+details ul { margin: 6px 0 0; padding-left: 18px; }
+details li { margin-bottom: 5px; }
+.foot { margin: 18px 0 0; font-size: 11.5px; color: var(--ink-soft); letter-spacing: .04em; }
+.foot a { color: inherit; }
+
+@media (min-width: 980px) {
+  #app { display: grid; grid-template-columns: minmax(0, 1fr) 400px; column-gap: 28px; align-items: start; }
+  .top { grid-column: 1 / -1; padding-top: 20px; }
+  .brand h1 { font-size: 24px; }
+  .stage { top: 14px; background: none; box-shadow: none; padding: 0; }
+  .crt { max-width: calc((100vh - 170px) * 4 / 3); }
+  .osd { font-size: 12px; left: 12px; top: 10px; right: 12px; }
+  .msg { order: 0; flex: 1 1 0; }
+  .deck { padding-top: 0; }
+}
+@media (max-width: 380px) {
+  .presets { grid-template-columns: repeat(2, 1fr); }
+  .row { grid-template-columns: 84px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .led.busy { animation: none; }
+  .switch i::after { transition: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand">
+      <h1>DEMAKER</h1>
+      <p>FBX in. 32-bit out.</p>
+    </div>
+    <label class="key go" for="fileIn" id="openBtn" tabindex="0" role="button">Open FBX</label>
+    <input id="fileIn" type="file" multiple hidden>
+  </header>
+
+  <section class="stage" aria-label="Preview">
+    <div class="crt" id="crt">
+      <canvas id="view" aria-label="3D preview. Drag to orbit, pinch or scroll to zoom."></canvas>
+      <div class="osd" id="osd"></div>
+      <div class="veil" id="veil" hidden></div>
+    </div>
+    <div class="strip">
+      <div class="msg"><span class="led" id="led"></span><span id="status" role="status" aria-live="polite">Starting up</span></div>
+      <div class="seg" role="group" aria-label="View">
+        <button type="button" id="viewPs1" aria-pressed="true">PS1</button>
+        <button type="button" id="viewOrig" aria-pressed="false">Original</button>
+      </div>
+      <button type="button" class="key" id="spinBtn" aria-pressed="true">Spin</button>
+    </div>
+  </section>
+
+  <section class="deck" id="deck" aria-label="Conversion settings">
+    <div class="group">
+      <h2>Era</h2>
+      <div class="presets" id="presets" role="group" aria-label="Presets"></div>
+    </div>
+    <div id="groups"></div>
+    <div class="export">
+      <button type="button" class="key go" id="exportBtn">Export .glb</button>
+      <p class="note" id="exportNote">Mesh, rig, animation and textures in one .glb, saved inside a .zip with the texture page as a .png.</p>
+      <details>
+        <summary>What gets baked, and what does not</summary>
+        <ul>
+          <li><b>Baked into the file:</b> the triangle budget, the vertex grid, the texture size, palette and dithering, the skeleton and every animation clip.</li>
+          <li><b>Not baked:</b> vertex jitter, texture warp, screen dither and resolution. A real PS1 did those while drawing, so they belong in your engine's shader. The preview shows what they will look like.</li>
+          <li><b>In your engine:</b> set texture filtering to nearest (point), turn mipmaps off, and render to a 320×240 target.</li>
+          <li><b>Textures not showing?</b> Many FBX files keep textures as separate images. Open the FBX and its images together, or add the images afterwards.</li>
+        </ul>
+      </details>
+      <p class="foot">DEMAKER · MIT LICENSE · RUNS ON YOUR DEVICE, NOTHING IS UPLOADED · <a href="https://github.com/Toltecs101/demaker">SOURCE ON GITHUB</a></p>
+    </div>
+  </section>
+</div>
+<script>
+// If the 3D engine never arrives (offline, or the CDN is blocked), say so instead of sitting silent.
+setTimeout(function () {
+  if (!window.demaker) {
+    document.getElementById('status').textContent = 'Could not load the 3D engine (three.js) from the network. Check your connection, then reload.';
+    document.getElementById('led').className = 'led err';
+  }
+}, 15000);
+</script>
+<script type="module">
+/*! Demaker: FBX to PS1-style asset converter. MIT License, (c) 2026 VOIDMONKX. */
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { TGALoader } from 'three/addons/loaders/TGALoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshoptSimplifier } from 'three/addons/libs/meshopt_simplifier.module.js';
+import { zipSync, strToU8 } from 'three/addons/libs/fflate.module.js';
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+
+/* =====================================================================
+   1. Settings and presets
+   ===================================================================== */
+
+const PRESETS = {
+  demake: { name: 'Demake', blurb: '320 tris, 64 px, 16 colors', tris: 320, grid: 128, texSize: 64, colors: 16, texDither: 0.5, res: '320x240', jitter: 1, affine: 1, dither: true, shading: 'unlit', filter: 'nearest', fps: 15 },
+  ps1a: { name: 'PS1 ’95', blurb: '550 tris, 128 px, 16 colors', tris: 550, grid: 256, texSize: 128, colors: 16, texDither: 0.35, res: '320x240', jitter: 1, affine: 1, dither: true, shading: 'gouraud', filter: 'nearest', fps: 30 },
+  ps1b: { name: 'PS1 ’99', blurb: '1,100 tris, 256 px, 256 colors', tris: 1100, grid: 512, texSize: 256, colors: 256, texDither: 0.25, res: '320x240', jitter: 1, affine: 1, dither: true, shading: 'gouraud', filter: 'nearest', fps: 30 },
+  ps2: { name: 'PS2 ’01', blurb: '3,200 tris, 512 px, smooth', tris: 3200, grid: 0, texSize: 512, colors: 0, texDither: 0, res: '640x480', jitter: 0, affine: 0, dither: false, shading: 'gouraud', filter: 'bilinear', fps: 0 },
+};
+const DEFAULTS = { preset: 'ps1a', ...PRESETS.ps1a, view: 'ps1', spin: !matchMedia('(prefers-reduced-motion: reduce)').matches, play: true, clip: 0 };
+for (const k of ['name', 'blurb']) delete DEFAULTS[k];
+let S = { ...DEFAULTS };
+
+// The PlayStation GPU's 4x4 dither offsets, added to 8-bit color before it is cut to 5 bits.
+const PS1_DITHER = [-4, 0, -3, 1, 2, -2, 3, -1, -3, 1, -4, 0, 3, -1, 2, -2];
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/* =====================================================================
+   2. Mesh pipeline: weld by position, decimate, chart
+   ===================================================================== */
+
+function plain(attr) {
+  if (!attr.isInterleavedBufferAttribute && !attr.normalized) return attr.array;
+  const n = attr.count, s = attr.itemSize, out = new Float32Array(n * s);
+  for (let i = 0; i < n; i++) for (let k = 0; k < s; k++) out[i * s + k] = attr.getComponent(i, k);
+  return out;
+}
+
+// Per-triangle material slot from geometry groups.
+function triangleSlots(g, nT, slotCount) {
+  const out = new Uint16Array(nT);
+  for (const gr of g.groups) {
+    const a = Math.max(0, Math.floor(gr.start / 3)), b = Math.min(nT, Math.ceil((gr.start + gr.count) / 3));
+    const s = clamp(gr.materialIndex | 0, 0, slotCount - 1);
+    for (let t = a; t < b; t++) out[t] = s;
+  }
+  return out;
+}
+
+/* FBX meshes arrive as triangle soup, split wherever UVs, normals or materials change. Decimating that
+   directly fails: every split is a seam the simplifier must keep. So corners are welded by position only,
+   which gives the simplifier one continuous surface, and the texture is re-baked afterwards (section 3). */
+function prepEntry(model, e) {
+  const g = e.origGeometry;
+  const idx = g.index ? g.index.array : null;
+  const P = plain(g.attributes.position);
+  const nT = Math.floor((idx ? idx.length : g.attributes.position.count) / 3), nC = nT * 3;
+  const Nn = g.attributes.normal ? plain(g.attributes.normal) : null;
+  const UV = g.attributes.uv ? plain(g.attributes.uv) : null;
+  const SI = e.skinned ? plain(g.attributes.skinIndex) : null, SW = e.skinned ? plain(g.attributes.skinWeight) : null;
+  const colAttr = e.useVColor ? g.attributes.color : null;
+  const COL = colAttr ? plain(colAttr) : null, cs = colAttr ? colAttr.itemSize : 0;
+  const slots = triangleSlots(g, nT, e.mats.length), triMat = new Uint16Array(nT);
+  for (let t = 0; t < nT; t++) triMat[t] = e.mats[slots[t]];
+
+  let minx = Infinity, miny = Infinity, minz = Infinity, maxx = -Infinity, maxy = -Infinity, maxz = -Infinity;
+  for (let c = 0; c < nC; c++) {
+    const v = (idx ? idx[c] : c) * 3;
+    if (P[v] < minx) minx = P[v]; if (P[v] > maxx) maxx = P[v];
+    if (P[v + 1] < miny) miny = P[v + 1]; if (P[v + 1] > maxy) maxy = P[v + 1];
+    if (P[v + 2] < minz) minz = P[v + 2]; if (P[v + 2] > maxz) maxz = P[v + 2];
+  }
+  const ext = Math.max(maxx - minx, maxy - miny, maxz - minz) || 1, ps = 1048576 / ext;
+
+  const q = new Int32Array(nC * 3);
+  for (let c = 0; c < nC; c++) {
+    const v = (idx ? idx[c] : c) * 3;
+    q[c * 3] = Math.round((P[v] - minx) * ps); q[c * 3 + 1] = Math.round((P[v + 1] - miny) * ps); q[c * 3 + 2] = Math.round((P[v + 2] - minz) * ps);
+  }
+  let size = 1; while (size < nC * 2) size <<= 1;
+  const mask = size - 1, table = new Int32Array(size).fill(-1);
+  const cornerPoint = new Uint32Array(nC), first = new Uint32Array(nC);
+  let m = 0;
+  for (let c = 0; c < nC; c++) {
+    const o = c * 3;
+    let h = Math.imul(Math.imul(Math.imul(2166136261 ^ q[o], 16777619) ^ q[o + 1], 16777619) ^ q[o + 2], 16777619);
+    h = (h ^ (h >>> 15)) & mask;
+    for (;;) {
+      const en = table[h];
+      if (en < 0) { table[h] = c; first[m] = c; cornerPoint[c] = m++; break; }
+      const eo = en * 3;
+      if (q[eo] === q[o] && q[eo + 1] === q[o + 1] && q[eo + 2] === q[o + 2]) { cornerPoint[c] = cornerPoint[en]; break; }
+      h = (h + 1) & mask;
+    }
+  }
+  const points = new Float32Array(m * 3);
+  const skinIndex = SI ? new Uint16Array(m * 4) : null, skinWeight = SW ? new Float32Array(m * 4) : null;
+  for (let i = 0; i < m; i++) {
+    const v = idx ? idx[first[i]] : first[i];
+    points[i * 3] = P[v * 3]; points[i * 3 + 1] = P[v * 3 + 1]; points[i * 3 + 2] = P[v * 3 + 2];
+    if (SI) for (let j = 0; j < 4; j++) { skinIndex[i * 4 + j] = SI[v * 4 + j]; skinWeight[i * 4 + j] = SW[v * 4 + j]; }
+  }
+  const index = new Uint32Array(nC);
+  let w = 0;
+  for (let t = 0; t < nT; t++) {
+    const a = cornerPoint[t * 3], b = cornerPoint[t * 3 + 1], c = cornerPoint[t * 3 + 2];
+    if (a === b || b === c || a === c) continue;
+    index[w++] = a; index[w++] = b; index[w++] = c;
+  }
+  // point -> corners, so output vertices can borrow the original normals
+  const ptStart = new Uint32Array(m + 1), ptCorners = new Uint32Array(nC);
+  for (let c = 0; c < nC; c++) ptStart[cornerPoint[c] + 1]++;
+  for (let i = 0; i < m; i++) ptStart[i + 1] += ptStart[i];
+  const cur = ptStart.slice(0, m);
+  for (let c = 0; c < nC; c++) ptCorners[cur[cornerPoint[c]]++] = c;
+  return {
+    nT, idx, P, Nn, UV, COL, cs, triMat, m, points, index: index.slice(0, w), tris: w / 3, ptStart, ptCorners, skinIndex, skinWeight,
+    min: [minx, miny, minz], max: [maxx, maxy, maxz], grid: null, triLin: null,
+  };
+}
+
+// Decimate to a triangle budget. The survivors are a subset of the original vertices.
+function simplifyPoints(prep, targetTris, skinned) {
+  const full = prep.index.length, target = Math.max(3, Math.min(full, Math.round(targetTris) * 3));
+  if (target >= full) return prep.index;
+  // Prune drops tiny loose pieces first; RegularizeLight keeps triangles even enough to bend well on a rig.
+  const flags = skinned ? ['Prune', 'RegularizeLight'] : ['Prune'];
+  let out = MeshoptSimplifier.simplify(prep.index, prep.points, 3, target, 1.0, flags)[0];
+  if (out.length < 3) out = MeshoptSimplifier.simplify(prep.index, prep.points, 3, target, 1.0, [])[0];
+  if (out.length > target * 1.3) {
+    // Meshes made of thousands of loose or tangled pieces: ignore topology and cluster instead.
+    const s = MeshoptSimplifier.simplifySloppy(prep.index, prep.points, 3, null, target, 1.0)[0];
+    if (s.length >= 3 && s.length < out.length) out = s;
+  }
+  return out;
+}
+
+/* Unwrap the low-poly mesh the way a PS1 artist would have: look at it from the front, back, sides, top
+   and bottom, and give each connected patch that faces the same way its own flat piece of texture. */
+function chartFaces(prep, tris) {
+  const pts = prep.points, nF = tris.length / 3, M = prep.m;
+  const fn = new Float32Array(nF * 3), area = new Float32Array(nF), bucket = new Int8Array(nF);
+  for (let f = 0; f < nF; f++) {
+    const a = tris[f * 3] * 3, b = tris[f * 3 + 1] * 3, c = tris[f * 3 + 2] * 3;
+    const ux = pts[b] - pts[a], uy = pts[b + 1] - pts[a + 1], uz = pts[b + 2] - pts[a + 2];
+    const vx = pts[c] - pts[a], vy = pts[c + 1] - pts[a + 1], vz = pts[c + 2] - pts[a + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1e-30;
+    area[f] = l / 2; nx /= l; ny /= l; nz /= l;
+    fn[f * 3] = nx; fn[f * 3 + 1] = ny; fn[f * 3 + 2] = nz;
+    const ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz), k = ax >= ay && ax >= az ? 0 : ay >= az ? 1 : 2;
+    bucket[f] = k * 2 + (fn[f * 3 + k] < 0 ? 1 : 0);
+  }
+  const facing = (f, b) => (b & 1 ? -1 : 1) * fn[f * 3 + (b >> 1)];
+  const nb = new Int32Array(nF * 3).fill(-1), edges = new Map();
+  for (let f = 0; f < nF; f++) for (let k = 0; k < 3; k++) {
+    const a = tris[f * 3 + k], b = tris[f * 3 + ((k + 1) % 3)], key = a < b ? a * M + b : b * M + a, o = edges.get(key);
+    if (o === undefined) edges.set(key, f * 3 + k);
+    else { nb[f * 3 + k] = (o / 3) | 0; if (nb[o] < 0) nb[o] = f; }
+  }
+  // A face that disagrees with two of its neighbours joins them, which removes speckle along 45-degree slopes.
+  for (let pass = 0; pass < 2; pass++) for (let f = 0; f < nF; f++) {
+    const b0 = nb[f * 3] >= 0 ? bucket[nb[f * 3]] : -1, b1 = nb[f * 3 + 1] >= 0 ? bucket[nb[f * 3 + 1]] : -1, b2 = nb[f * 3 + 2] >= 0 ? bucket[nb[f * 3 + 2]] : -1;
+    const maj = b0 >= 0 && (b0 === b1 || b0 === b2) ? b0 : b1 >= 0 && b1 === b2 ? b1 : -1;
+    if (maj >= 0 && maj !== bucket[f] && facing(f, maj) > 0.5) bucket[f] = maj;
+  }
+  const chartOf = new Int32Array(nF).fill(-1);
+  const flood = (seed, id, ok) => {
+    const faces = [seed]; chartOf[seed] = id;
+    for (let i = 0; i < faces.length; i++) for (let k = 0; k < 3; k++) {
+      const g = nb[faces[i] * 3 + k];
+      if (g >= 0 && chartOf[g] === -1 && ok(g)) { chartOf[g] = id; faces.push(g); }
+    }
+    return faces;
+  };
+  let charts = [];
+  for (let f = 0; f < nF; f++) if (chartOf[f] < 0) { const b = bucket[f]; charts.push({ axis: b, faces: flood(f, charts.length, (g) => bucket[g] === b) }); }
+  // Fold scraps (a few triangles, or a sliver of the surface) into a neighbour they still roughly face.
+  let totalArea = 0; for (let f = 0; f < nF; f++) totalArea += area[f];
+  const chartArea = (c) => { let a = 0; for (const f of c.faces) a += area[f]; return a; };
+  for (let pass = 0; pass < 2; pass++) {
+    const order = charts.map((_, i) => i).filter((i) => charts[i]).sort((x, y) => charts[x].faces.length - charts[y].faces.length);
+    for (const ci of order) {
+      const c = charts[ci];
+      if (!c || (c.faces.length > 3 && chartArea(c) > totalArea * 0.004)) continue;
+      let best = -1, bestScore = 0.36;
+      for (const f of c.faces) for (let k = 0; k < 3; k++) {
+        const g = nb[f * 3 + k]; if (g < 0) continue;
+        const d = chartOf[g]; if (d === ci || !charts[d]) continue;
+        let sc = Infinity; for (const h of c.faces) sc = Math.min(sc, facing(h, charts[d].axis));
+        if (sc > bestScore) { bestScore = sc; best = d; }
+      }
+      if (best >= 0) { for (const f of c.faces) { chartOf[f] = best; charts[best].faces.push(f); } charts[ci] = null; }
+    }
+  }
+  // Split patches that would waste most of their rectangle (a T-pose seen from the front is mostly air).
+  const measure = (c) => {
+    const k = c.axis >> 1, iu = (k + 1) % 3, iv = (k + 2) % 3;
+    let parea = 0;
+    for (const f of c.faces) parea += area[f] * Math.abs(fn[f * 3 + k]);
+    const box = (ca, sa) => {
+      let umin = Infinity, umax = -Infinity, vmin = Infinity, vmax = -Infinity;
+      for (const f of c.faces) for (let j = 0; j < 3; j++) {
+        const p = tris[f * 3 + j] * 3, u = pts[p + iu] * ca + pts[p + iv] * sa, v = pts[p + iv] * ca - pts[p + iu] * sa;
+        if (u < umin) umin = u; if (u > umax) umax = u; if (v < vmin) vmin = v; if (v > vmax) vmax = v;
+      }
+      return { ca, sa, umin, vmin, bw: umax - umin, bh: vmax - vmin };
+    };
+    let best = box(1, 0);
+    if (c.faces.length <= 8) {
+      // Small patches may turn to sit square in their rectangle; big ones stay lined up with the model.
+      for (const f of c.faces) for (let j = 0; j < 3; j++) {
+        const p = tris[f * 3 + j] * 3, q2 = tris[f * 3 + ((j + 1) % 3)] * 3, du = pts[q2 + iu] - pts[p + iu], dv = pts[q2 + iv] - pts[p + iv], l = Math.hypot(du, dv);
+        if (l < 1e-20) continue;
+        const cand = box(du / l, dv / l);
+        if (cand.bw * cand.bh < best.bw * best.bh * 0.85) best = cand;
+      }
+    }
+    return Object.assign(c, { iu, iv, parea }, best);
+  };
+  const done = [], work = charts.filter(Boolean).map((c) => ({ axis: c.axis, faces: c.faces, depth: 0 }));
+  const side = new Int8Array(nF);
+  while (work.length) {
+    const c = measure(work.pop());
+    const fill = c.parea / Math.max(c.bw * c.bh, 1e-30);
+    if (c.faces.length < 6 || fill >= 0.45 || c.depth >= 6) { done.push(c); continue; }
+    const useU = c.bw >= c.bh, mid = useU ? c.umin + c.bw / 2 : c.vmin + c.bh / 2;
+    const along = (p) => (useU ? pts[p + c.iu] * c.ca + pts[p + c.iv] * c.sa : pts[p + c.iv] * c.ca - pts[p + c.iu] * c.sa);
+    for (const f of c.faces) { side[f] = (along(tris[f * 3] * 3) + along(tris[f * 3 + 1] * 3) + along(tris[f * 3 + 2] * 3)) / 3 < mid ? 0 : 1; chartOf[f] = -1; }
+    const parts = [];
+    for (const f of c.faces) if (chartOf[f] === -1) { const sd = side[f]; parts.push(flood(f, -2, (g) => side[g] === sd)); }
+    for (const f of c.faces) chartOf[f] = -3;
+    if (parts.length < 2) { done.push(c); continue; }
+    for (const faces of parts) work.push({ axis: c.axis, faces, depth: c.depth + 1 });
+  }
+  done.forEach((c, i) => { for (const f of c.faces) chartOf[f] = i; });
+  return { tris, nF, fn, area, chartOf, charts: done };
+}
+
+/* =====================================================================
+   3. Texture pipeline: bake the original surface onto one page, then palette and dither
+   ===================================================================== */
+
+const imageSize = (img) => [img.naturalWidth || img.videoWidth || img.width || 0, img.naturalHeight || img.videoHeight || img.height || 0];
+const imageUsable = (map) => { if (!map || !map.image) return false; const [w, h] = imageSize(map.image); return w > 0 && h > 0; };
+
+// Source pixels for a material, top row first, capped at 1024 px, plus a chain of half-size copies.
+function itemMips(item) {
+  if (item.mips) return item.mips;
+  let level;
+  if (!item.map) level = { data: new Uint8ClampedArray([255, 255, 255, 255]), w: 1, h: 1 };
+  else {
+    const img = item.map.image, [sw, sh] = imageSize(img);
+    const k = Math.min(1, 1024 / Math.max(sw, sh)), w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.imageSmoothingQuality = 'high';
+    let source = img;
+    if (img.data && !(img instanceof HTMLElement)) {
+      // Raw pixel textures (TGA and friends).
+      const ch = Math.round(img.data.length / (sw * sh)), raw = new Uint8ClampedArray(sw * sh * 4);
+      for (let i = 0, n = sw * sh; i < n; i++) {
+        raw[i * 4] = img.data[i * ch]; raw[i * 4 + 1] = img.data[i * ch + (ch > 1 ? 1 : 0)]; raw[i * 4 + 2] = img.data[i * ch + (ch > 2 ? 2 : 0)];
+        raw[i * 4 + 3] = ch > 3 ? img.data[i * ch + 3] : 255;
+      }
+      source = document.createElement('canvas'); source.width = sw; source.height = sh;
+      source.getContext('2d').putImageData(new ImageData(raw, sw, sh), 0, 0);
+    }
+    if (item.map.flipY === false) { cx.translate(0, h); cx.scale(1, -1); }
+    cx.drawImage(source, 0, 0, w, h);
+    let data;
+    try { data = cx.getImageData(0, 0, w, h).data; } catch (err) { data = new Uint8ClampedArray(w * h * 4).fill(200); }
+    level = { data, w, h };
+  }
+  const mips = [level];
+  while (level.w > 1 || level.h > 1) {
+    const w = Math.max(1, level.w >> 1), h = Math.max(1, level.h >> 1), d = new Uint8ClampedArray(w * h * 4), s = level.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+        const o = (Math.min(level.h - 1, y * 2 + j) * level.w + Math.min(level.w - 1, x * 2 + i)) * 4, al = s[o + 3];
+        r += s[o] * al; g += s[o + 1] * al; b += s[o + 2] * al; a += al;
+      }
+      const o = (y * w + x) * 4;
+      if (a > 0) { d[o] = r / a; d[o + 1] = g / a; d[o + 2] = b / a; }
+      d[o + 3] = a / 4;
+    }
+    level = { data: d, w, h }; mips.push(level);
+  }
+  return (item.mips = mips);
+}
+
+// A uniform grid over the original triangles, for "what is the nearest bit of the real model?" lookups.
+function buildGrid(prep) {
+  const { P, idx, nT, min, max } = prep;
+  let total = 0;
+  const vert = (t, k) => (idx ? idx[t * 3 + k] : t * 3 + k) * 3;
+  for (let t = 0; t < nT; t++) {
+    const a = vert(t, 0), b = vert(t, 1), c = vert(t, 2);
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    total += 0.5 * Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+  }
+  const ext = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
+  const cell = Math.max(Math.sqrt(total / Math.max(1, nT)) * 2.5, ext / 96, 1e-12);
+  const nx = Math.max(1, Math.ceil((max[0] - min[0]) / cell + 1e-6)), ny = Math.max(1, Math.ceil((max[1] - min[1]) / cell + 1e-6)), nz = Math.max(1, Math.ceil((max[2] - min[2]) / cell + 1e-6));
+  const start = new Uint32Array(nx * ny * nz + 1);
+  const range = (t, out) => {
+    const a = vert(t, 0), b = vert(t, 1), c = vert(t, 2);
+    for (let k = 0; k < 3; k++) {
+      const lo = Math.min(P[a + k], P[b + k], P[c + k]), hi = Math.max(P[a + k], P[b + k], P[c + k]), n = k === 0 ? nx : k === 1 ? ny : nz;
+      out[k] = clamp(Math.floor((lo - min[k]) / cell), 0, n - 1); out[k + 3] = clamp(Math.floor((hi - min[k]) / cell), 0, n - 1);
+    }
+  };
+  const r = new Int32Array(6);
+  for (let t = 0; t < nT; t++) { range(t, r); for (let z = r[2]; z <= r[5]; z++) for (let y = r[1]; y <= r[4]; y++) for (let x = r[0]; x <= r[3]; x++) start[(z * ny + y) * nx + x + 1]++; }
+  for (let i = 0; i < start.length - 1; i++) start[i + 1] += start[i];
+  const items = new Uint32Array(start[start.length - 1]), cur = start.slice(0, start.length - 1);
+  for (let t = 0; t < nT; t++) { range(t, r); for (let z = r[2]; z <= r[5]; z++) for (let y = r[1]; y <= r[4]; y++) for (let x = r[0]; x <= r[3]; x++) items[cur[(z * ny + y) * nx + x]++] = t; }
+  return { cell, nx, ny, nz, start, items, stamp: new Uint32Array(nT), tick: 0 };
+}
+
+// Nearest original triangle to a point, preferring ones that face the same way as the low-poly face.
+// Returns the triangle and writes its barycentric coordinates into `bary`.
+function nearestTriangle(prep, grid, px, py, pz, nx, ny, nz, bary) {
+  const { P, idx, min } = prep, { cell, start, items, stamp } = grid;
+  const cx = clamp(Math.floor((px - min[0]) / cell), 0, grid.nx - 1), cy = clamp(Math.floor((py - min[1]) / cell), 0, grid.ny - 1), cz = clamp(Math.floor((pz - min[2]) / cell), 0, grid.nz - 1);
+  const tick = ++grid.tick;
+  let best = Infinity, bt = -1;
+  const maxR = Math.max(grid.nx, grid.ny, grid.nz);
+  for (let r = 0; r <= maxR; r++) {
+    const z0 = Math.max(0, cz - r), z1 = Math.min(grid.nz - 1, cz + r), y0 = Math.max(0, cy - r), y1 = Math.min(grid.ny - 1, cy + r), x0 = Math.max(0, cx - r), x1 = Math.min(grid.nx - 1, cx + r);
+    for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) {
+      const edge = Math.abs(z - cz) === r || Math.abs(y - cy) === r;
+      for (let x = x0; x <= x1; x += edge || r === 0 ? 1 : Math.max(1, x1 - x0)) {
+        if (!edge && Math.abs(x - cx) !== r) continue;
+        const ci = (z * grid.ny + y) * grid.nx + x;
+        for (let i = start[ci], e = start[ci + 1]; i < e; i++) {
+          const t = items[i];
+          if (stamp[t] === tick) continue; stamp[t] = tick;
+          const a = (idx ? idx[t * 3] : t * 3) * 3, b = (idx ? idx[t * 3 + 1] : t * 3 + 1) * 3, c = (idx ? idx[t * 3 + 2] : t * 3 + 2) * 3;
+          const ax = P[a], ay = P[a + 1], az = P[a + 2];
+          const abx = P[b] - ax, aby = P[b + 1] - ay, abz = P[b + 2] - az, acx = P[c] - ax, acy = P[c + 1] - ay, acz = P[c + 2] - az;
+          const apx = px - ax, apy = py - ay, apz = pz - az;
+          const d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
+          let u, v, w;
+          if (d1 <= 0 && d2 <= 0) { u = 1; v = 0; w = 0; }
+          else {
+            const bpx = apx - abx, bpy = apy - aby, bpz = apz - abz, d3 = abx * bpx + aby * bpy + abz * bpz, d4 = acx * bpx + acy * bpy + acz * bpz;
+            if (d3 >= 0 && d4 <= d3) { u = 0; v = 1; w = 0; }
+            else {
+              const vc = d1 * d4 - d3 * d2;
+              if (vc <= 0 && d1 >= 0 && d3 <= 0) { v = d1 / (d1 - d3); u = 1 - v; w = 0; }
+              else {
+                const cpx = apx - acx, cpy = apy - acy, cpz = apz - acz, d5 = abx * cpx + aby * cpy + abz * cpz, d6 = acx * cpx + acy * cpy + acz * cpz;
+                if (d6 >= 0 && d5 <= d6) { u = 0; v = 0; w = 1; }
+                else {
+                  const vb = d5 * d2 - d1 * d6;
+                  if (vb <= 0 && d2 >= 0 && d6 <= 0) { w = d2 / (d2 - d6); u = 1 - w; v = 0; }
+                  else {
+                    const va = d3 * d6 - d5 * d4;
+                    if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { w = (d4 - d3) / (d4 - d3 + (d5 - d6)); u = 0; v = 1 - w; }
+                    else { const den = 1 / (va + vb + vc); v = vb * den; w = vc * den; u = 1 - v - w; }
+                  }
+                }
+              }
+            }
+          }
+          const qx = apx - (abx * v + acx * w), qy = apy - (aby * v + acy * w), qz = apz - (abz * v + acz * w);
+          let d = qx * qx + qy * qy + qz * qz;
+          // a triangle that faces away is probably the far side of a thin part or an inner layer
+          if ((aby * acz - abz * acy) * nx + (abz * acx - abx * acz) * ny + (abx * acy - aby * acx) * nz < 0) d = d * 6 + cell * cell * 0.05;
+          if (d < best) { best = d; bt = t; bary[0] = u; bary[1] = v; bary[2] = w; }
+        }
+      }
+    }
+    if (bt >= 0 && best <= r * cell * (r * cell)) break;
+  }
+  return bt;
+}
+
+// How many source-texture pixels per unit of length an original triangle carries (0 when untextured).
+function sourceDensity(model, prep, t) {
+  const lin = (prep.triLin ??= new Float32Array(prep.nT).fill(-1));
+  if (lin[t] >= 0) return lin[t];
+  const gm = prep.triMat[t], item = model.items[model.matItem[gm]];
+  let d = 0;
+  if (item.map && prep.UV) {
+    const { P, UV, idx } = prep, xf = model.matXform[gm], top = itemMips(item)[0];
+    const a = idx ? idx[t * 3] : t * 3, b = idx ? idx[t * 3 + 1] : t * 3 + 1, c = idx ? idx[t * 3 + 2] : t * 3 + 2;
+    const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+    const a3 = 0.5 * Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+    const a2 = 0.5 * Math.abs((UV[b * 2] - UV[a * 2]) * (UV[c * 2 + 1] - UV[a * 2 + 1]) - (UV[c * 2] - UV[a * 2]) * (UV[b * 2 + 1] - UV[a * 2 + 1])) * Math.abs(xf[0] * xf[1]);
+    d = a3 > 0 ? Math.sqrt((a2 * top.w * top.h) / a3) : 0;
+  }
+  return (lin[t] = d);
+}
+
+const wrapUV = (v, mode) => (mode === THREE.RepeatWrapping ? v - Math.floor(v) : mode === THREE.MirroredRepeatWrapping ? 1 - Math.abs(((v % 2) + 2) % 2 - 1) : clamp(v, 0, 1));
+
+// Color of the original model at a point on one of its triangles, read at a detail level that matches the page.
+function sampleOriginal(model, prep, t, bary, texelsPerUnit, out) {
+  const gm = prep.triMat[t], item = model.items[model.matItem[gm]], { idx, UV, COL, cs } = prep;
+  const a = idx ? idx[t * 3] : t * 3, b = idx ? idx[t * 3 + 1] : t * 3 + 1, c = idx ? idx[t * 3 + 2] : t * 3 + 2;
+  let r = 255, g = 255, bl = 255, al = 255;
+  if (item.map && UV) {
+    const xf = model.matXform[gm], mips = itemMips(item);
+    const u = wrapUV((bary[0] * UV[a * 2] + bary[1] * UV[b * 2] + bary[2] * UV[c * 2]) * xf[0] + xf[2], item.map.wrapS);
+    const v = wrapUV((bary[0] * UV[a * 2 + 1] + bary[1] * UV[b * 2 + 1] + bary[2] * UV[c * 2 + 1]) * xf[1] + xf[3], item.map.wrapT);
+    const dens = sourceDensity(model, prep, t);
+    // Read the source at the detail level closest to one source pixel per page pixel (rounded toward sharper).
+    const lv = mips[dens > 0 ? clamp(Math.floor(Math.log2(dens / texelsPerUnit)), 0, mips.length - 1) : mips.length - 1];
+    const o = (Math.min(lv.h - 1, Math.floor((1 - v) * lv.h)) * lv.w + Math.min(lv.w - 1, Math.floor(u * lv.w))) * 4;
+    r = lv.data[o]; g = lv.data[o + 1]; bl = lv.data[o + 2]; al = lv.data[o + 3];
+  }
+  r *= item.color[0]; g *= item.color[1]; bl *= item.color[2];
+  if (COL) {
+    r *= bary[0] * COL[a * cs] + bary[1] * COL[b * cs] + bary[2] * COL[c * cs];
+    g *= bary[0] * COL[a * cs + 1] + bary[1] * COL[b * cs + 1] + bary[2] * COL[c * cs + 1];
+    bl *= bary[0] * COL[a * cs + 2] + bary[1] * COL[b * cs + 2] + bary[2] * COL[c * cs + 2];
+  }
+  out[0] = r; out[1] = g; out[2] = bl; out[3] = al;
+}
+
+// Where a point of a patch lands on the page, in pixels (u, v are its two in-plane coordinates).
+const chartX = (ch, u, v) => ch.x0 + 0.5 + (ch.rot ? v * ch.ca - u * ch.sa - ch.vmin : u * ch.ca + v * ch.sa - ch.umin) * ch.sc;
+const chartY = (ch, u, v) => ch.y0 + 0.5 + (ch.rot ? u * ch.ca + v * ch.sa - ch.umin : v * ch.ca - u * ch.sa - ch.vmin) * ch.sc;
+
+/* Size every patch by its real-world area, nudged by how much texture the original spent there (so a
+   face keeps more pixels than a boot), then shelf-pack them into the page at the largest scale that fits. */
+function layoutPage(model, N) {
+  const all = [], bary = new Float32Array(3);
+  let dSum = 0, aSum = 0;
+  for (const e of model.entries) {
+    const prep = e.prep, low = e.low, pts = prep.points, grid = (prep.grid ??= buildGrid(prep));
+    for (const ch of low.charts) {
+      let d = 0, ar = 0;
+      for (const f of ch.faces) {
+        const a = low.tris[f * 3] * 3, b = low.tris[f * 3 + 1] * 3, c = low.tris[f * 3 + 2] * 3;
+        const t = nearestTriangle(prep, grid, (pts[a] + pts[b] + pts[c]) / 3, (pts[a + 1] + pts[b + 1] + pts[c + 1]) / 3, (pts[a + 2] + pts[b + 2] + pts[c + 2]) / 3, low.fn[f * 3], low.fn[f * 3 + 1], low.fn[f * 3 + 2], bary);
+        d += (t >= 0 ? sourceDensity(model, prep, t) / e.scale : 0) * low.area[f]; ar += low.area[f];
+      }
+      ch.dens = ar > 0 ? d / ar : 0; ch.entry = e;
+      const wa = ar * e.scale * e.scale;
+      if (ch.dens > 0) { dSum += ch.dens * wa; aSum += wa; }
+      all.push(ch);
+    }
+  }
+  const mean = aSum > 0 ? dSum / aSum : 0;
+  let maxW = 1e-30;
+  for (const ch of all) {
+    ch.k = mean > 0 ? (ch.dens > 0 ? clamp(ch.dens / mean, 0.5, 2.5) : 0.35) : 1;
+    const ww = ch.bw * ch.entry.scale * ch.k, wh = ch.bh * ch.entry.scale * ch.k;
+    ch.rot = wh > ww; ch.pw = Math.max(ww, wh); ch.ph = Math.min(ww, wh);
+    if (ch.pw > maxW) maxW = ch.pw;
+  }
+  const sorted = all.slice().sort((p, q2) => q2.ph - p.ph);
+  const fit = (s, commit) => {
+    let x = 0, y = 0, shelf = 0;
+    for (const ch of sorted) {
+      const cw = Math.min(N, Math.ceil(ch.pw * s) + 1), chh = Math.min(N, Math.ceil(ch.ph * s) + 1);
+      if (x + cw > N) { y += shelf; x = 0; shelf = 0; }
+      if (y + chh > N) return false;
+      if (commit) { ch.x0 = x; ch.y0 = y; ch.cw = cw; ch.ch = chh; ch.sc = s * ch.k * ch.entry.scale; }
+      x += cw; if (chh > shelf) shelf = chh;
+    }
+    return true;
+  };
+  let lo = 0, hi = (N - 1) / maxW;
+  if (fit(hi)) lo = hi; else for (let i = 0; i < 26; i++) { const mid = (lo + hi) / 2; if (fit(mid)) lo = mid; else hi = mid; }
+  if (!fit(lo, true)) sorted.forEach((ch, i) => { ch.x0 = i % N; ch.y0 = Math.floor(i / N) % N; ch.cw = ch.ch = 1; ch.sc = 0; }); // more patches than pixels
+  return all.length;
+}
+
+// Paint the page: every pixel of every patch looks up the nearest point on the original model and takes its color.
+function bakePage(model, N) {
+  const rgba = new Uint8ClampedArray(N * N * 4), cover = new Float32Array(N * N).fill(-1e9);
+  const bary = new Float32Array(3), col = new Float32Array(4), X = [0, 0, 0], Y = [0, 0, 0];
+  for (const e of model.entries) {
+    const prep = e.prep, low = e.low, pts = prep.points, grid = prep.grid;
+    for (let f = 0; f < low.nF; f++) {
+      const ch = low.charts[low.chartOf[f]], pa = low.tris[f * 3] * 3, pb = low.tris[f * 3 + 1] * 3, pc = low.tris[f * 3 + 2] * 3, P3 = [pa, pb, pc];
+      for (let k = 0; k < 3; k++) { X[k] = chartX(ch, pts[P3[k] + ch.iu], pts[P3[k] + ch.iv]); Y[k] = chartY(ch, pts[P3[k] + ch.iu], pts[P3[k] + ch.iv]); }
+      const den = (Y[1] - Y[2]) * (X[0] - X[2]) + (X[2] - X[1]) * (Y[0] - Y[2]);
+      const flat = Math.abs(den) < 1e-9;
+      const xa = Math.max(ch.x0, Math.floor(Math.min(X[0], X[1], X[2]) - 1)), xb = Math.min(ch.x0 + ch.cw - 1, Math.floor(Math.max(X[0], X[1], X[2]) + 1));
+      const ya = Math.max(ch.y0, Math.floor(Math.min(Y[0], Y[1], Y[2]) - 1)), yb = Math.min(ch.y0 + ch.ch - 1, Math.floor(Math.max(Y[0], Y[1], Y[2]) + 1));
+      for (let py = ya; py <= yb; py++) for (let px = xa; px <= xb; px++) {
+        const cx = px + 0.5, cy = py + 0.5;
+        let w0 = 1 / 3, w1 = 1 / 3, w2 = 1 / 3, ins;
+        if (flat) ins = -Math.hypot((X[0] + X[1] + X[2]) / 3 - cx, (Y[0] + Y[1] + Y[2]) / 3 - cy);
+        else {
+          w0 = ((Y[1] - Y[2]) * (cx - X[2]) + (X[2] - X[1]) * (cy - Y[2])) / den; w1 = ((Y[2] - Y[0]) * (cx - X[2]) + (X[0] - X[2]) * (cy - Y[2])) / den; w2 = 1 - w0 - w1;
+          ins = Math.min(w0, w1, w2);
+          if (ins < 0) {
+            w0 = Math.max(w0, 0); w1 = Math.max(w1, 0); w2 = Math.max(w2, 0);
+            const sum = w0 + w1 + w2; w0 /= sum; w1 /= sum; w2 /= sum;
+            ins = -Math.hypot(w0 * X[0] + w1 * X[1] + w2 * X[2] - cx, w0 * Y[0] + w1 * Y[1] + w2 * Y[2] - cy);
+          }
+        }
+        if (ins < -1.01) continue;
+        const ti = py * N + px;
+        if (ins <= cover[ti]) continue;
+        const t = nearestTriangle(prep, grid, w0 * pts[pa] + w1 * pts[pb] + w2 * pts[pc], w0 * pts[pa + 1] + w1 * pts[pb + 1] + w2 * pts[pc + 1], w0 * pts[pa + 2] + w1 * pts[pb + 2] + w2 * pts[pc + 2], low.fn[f * 3], low.fn[f * 3 + 1], low.fn[f * 3 + 2], bary);
+        if (t < 0) continue;
+        cover[ti] = ins;
+        sampleOriginal(model, prep, t, bary, Math.max(ch.sc, 1e-30), col);
+        rgba[ti * 4] = col[0]; rgba[ti * 4 + 1] = col[1]; rgba[ti * 4 + 2] = col[2]; rgba[ti * 4 + 3] = col[3];
+      }
+    }
+  }
+  // Grow painted pixels outward into the unused ones so nothing dark creeps in at patch edges.
+  let filled = new Uint8Array(N * N), left = 0;
+  for (let i = 0; i < N * N; i++) { if (cover[i] > -1e8) filled[i] = 1; else left++; }
+  bakePage.coverage = 1 - left / (N * N);
+  for (let pass = 0; pass < 2 * N && left > 0; pass++) {
+    const next = filled.slice();
+    let grew = 0;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const i = y * N + x; if (filled[i]) continue;
+      let r = 0, g = 0, b = 0, a = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= N || yy >= N) continue;
+        const j = yy * N + xx; if (!filled[j]) continue;
+        r += rgba[j * 4]; g += rgba[j * 4 + 1]; b += rgba[j * 4 + 2]; a += rgba[j * 4 + 3]; n++;
+      }
+      if (n) { rgba[i * 4] = r / n; rgba[i * 4 + 1] = g / n; rgba[i * 4 + 2] = b / n; rgba[i * 4 + 3] = a / n; next[i] = 1; grew++; }
+    }
+    filled = next; left -= grew;
+    if (!grew) break;
+  }
+  return rgba;
+}
+
+const to5 = (v) => clamp(Math.round((v * 31) / 255), 0, 31);
+const from5 = (q) => (q << 3) | (q >> 2);
+
+// Median cut, then a few k-means passes, in 15-bit color. Returns [[r,g,b], ...] sorted dark to light.
+function buildPalette(smp, cnt, k) {
+  if (!cnt) return [[0, 0, 0]];
+  const order = new Uint32Array(cnt); for (let i = 0; i < cnt; i++) order[i] = i;
+  const W = [3, 4, 2];
+  const measure = (lo, hi) => {
+    const mn = [255, 255, 255], mx = [0, 0, 0];
+    for (let i = lo; i < hi; i++) { const o = order[i] * 3; for (let c = 0; c < 3; c++) { const v = smp[o + c]; if (v < mn[c]) mn[c] = v; if (v > mx[c]) mx[c] = v; } }
+    let axis = 0, best = -1;
+    for (let c = 0; c < 3; c++) { const rg = (mx[c] - mn[c]) * W[c]; if (rg > best) { best = rg; axis = c; } }
+    return { lo, hi, axis, score: best * Math.sqrt(hi - lo) };
+  };
+  let boxes = [measure(0, cnt)];
+  while (boxes.length < k) {
+    let bi = -1, bs = 0;
+    boxes.forEach((b, i) => { if (b.hi - b.lo > 1 && b.score > bs) { bs = b.score; bi = i; } });
+    if (bi < 0) break;
+    const b = boxes[bi], c = b.axis;
+    order.subarray(b.lo, b.hi).sort((p, q2) => smp[p * 3 + c] - smp[q2 * 3 + c]);
+    const mid = (b.lo + b.hi) >> 1;
+    boxes.splice(bi, 1, measure(b.lo, mid), measure(mid, b.hi));
+  }
+  let pal = boxes.map((b) => {
+    const s = [0, 0, 0];
+    for (let i = b.lo; i < b.hi; i++) { const o = order[i] * 3; s[0] += smp[o]; s[1] += smp[o + 1]; s[2] += smp[o + 2]; }
+    const n = b.hi - b.lo; return [s[0] / n, s[1] / n, s[2] / n];
+  });
+  for (let pass = 0; pass < 3; pass++) {
+    const sum = pal.map(() => [0, 0, 0, 0]);
+    for (let i = 0; i < cnt; i++) {
+      const r = smp[i * 3], g = smp[i * 3 + 1], b = smp[i * 3 + 2];
+      let bi = 0, bd = Infinity;
+      for (let j = 0; j < pal.length; j++) { const p = pal[j], d = 3 * (r - p[0]) ** 2 + 4 * (g - p[1]) ** 2 + 2 * (b - p[2]) ** 2; if (d < bd) { bd = d; bi = j; } }
+      const s = sum[bi]; s[0] += r; s[1] += g; s[2] += b; s[3]++;
+    }
+    pal = pal.map((p, j) => (sum[j][3] ? [sum[j][0] / sum[j][3], sum[j][1] / sum[j][3], sum[j][2] / sum[j][3]] : p));
+  }
+  const seen = new Set(), out = [];
+  for (const p of pal) {
+    const c = [from5(to5(p[0])), from5(to5(p[1])), from5(to5(p[2]))], key = (c[0] << 16) | (c[1] << 8) | c[2];
+    if (!seen.has(key)) { seen.add(key); out.push(c); }
+  }
+  return out.sort((a, b) => (3 * a[0] + 4 * a[1] + 2 * a[2]) - (3 * b[0] + 4 * b[1] + 2 * b[2]));
+}
+
+// Reduce an RGBA image in place to a PS1 texture format. colors: 16 | 256 | 32768 (15-bit) | 0 (untouched).
+function quantize(img, colors, dither) {
+  const { data, w, h } = img, n = w * h;
+  let cutout = false;
+  for (let i = 0; i < n; i++) {
+    if (data[i * 4 + 3] < 128) { data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = data[i * 4 + 3] = 0; cutout = true; }
+    else data[i * 4 + 3] = 255;
+  }
+  if (!colors) return { palette: null, cutout };
+  const amp = dither * (colors === 16 ? 44 : colors === 256 ? 14 : 8);
+  if (colors === 32768) {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4; if (!data[o + 3]) continue;
+      const t = ((BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5) * amp;
+      for (let c = 0; c < 3; c++) data[o + c] = from5(to5(data[o + c] + t));
+    }
+    return { palette: null, cutout };
+  }
+  const stepN = Math.max(1, Math.floor(n / 16384)), smp = new Uint8Array(Math.ceil(n / stepN) * 3);
+  let cnt = 0;
+  for (let i = 0; i < n; i += stepN) {
+    if (!data[i * 4 + 3]) continue;
+    smp[cnt * 3] = from5(to5(data[i * 4])); smp[cnt * 3 + 1] = from5(to5(data[i * 4 + 1])); smp[cnt * 3 + 2] = from5(to5(data[i * 4 + 2])); cnt++;
+  }
+  const pal = buildPalette(smp, cnt, colors);
+  const lut = new Int16Array(32768).fill(-1);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = (y * w + x) * 4; if (!data[o + 3]) continue;
+    const t = ((BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5) * amp;
+    const r = clamp(data[o] + t, 0, 255), g = clamp(data[o + 1] + t, 0, 255), b = clamp(data[o + 2] + t, 0, 255);
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    let bi = lut[key];
+    if (bi < 0) {
+      let bd = Infinity; bi = 0;
+      for (let j = 0; j < pal.length; j++) { const p = pal[j], d = 3 * (r - p[0]) ** 2 + 4 * (g - p[1]) ** 2 + 2 * (b - p[2]) ** 2; if (d < bd) { bd = d; bi = j; } }
+      lut[key] = bi;
+    }
+    data[o] = pal[bi][0]; data[o + 1] = pal[bi][1]; data[o + 2] = pal[bi][2];
+  }
+  return { palette: pal, cutout };
+}
+
+function toCanvas(img) {
+  const cv = document.createElement('canvas'); cv.width = img.w; cv.height = img.h;
+  cv.getContext('2d').putImageData(new ImageData(img.data, img.w, img.h), 0, 0);
+  return cv;
+}
+
+/* =====================================================================
+   4. The PS1 material
+   ===================================================================== */
+
+const U = {
+  uRes: { value: new THREE.Vector2(320, 240) }, uJitter: { value: 1 }, uAffine: { value: 1 },
+  uDither: { value: 1 }, uBits: { value: 5 }, uShading: { value: 0 },
+  uAmbient: { value: new THREE.Vector3(0.46, 0.46, 0.5) },
+  uL1Dir: { value: new THREE.Vector3(0.45, 0.75, 0.6).normalize() }, uL1Col: { value: new THREE.Vector3(0.56, 0.55, 0.52) },
+  uL2Dir: { value: new THREE.Vector3(-0.65, 0.15, -0.55).normalize() }, uL2Col: { value: new THREE.Vector3(0.12, 0.14, 0.2) },
+};
+
+const PS1_VERT = /* glsl */ `
+#include <skinning_pars_vertex>
+uniform vec2 uRes; uniform float uJitter; uniform int uShading;
+uniform vec3 uAmbient; uniform vec3 uL1Dir; uniform vec3 uL1Col; uniform vec3 uL2Dir; uniform vec3 uL2Col;
+varying vec2 vUv; varying vec3 vUvw; varying vec3 vLight; varying vec3 vView;
+#ifdef USE_COLOR
+varying vec3 vCol;
+#endif
+void main() {
+  vec3 transformed = position;
+  vec3 objectNormal = normal;
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <skinning_vertex>
+  vec4 mv = modelViewMatrix * vec4(transformed, 1.0);
+  vec4 clip = projectionMatrix * mv;
+  // The GTE hands the GPU whole-pixel screen coordinates: no sub-pixel precision, so vertices pop between pixels.
+  if (uJitter > 0.0) {
+    vec2 grid = uRes * 0.5 / uJitter;
+    clip.xy = floor(clip.xy / clip.w * grid + 0.5) / grid * clip.w;
+  }
+  gl_Position = clip;
+  vUv = uv;
+  vUvw = vec3(uv * clip.w, clip.w); // undoes the perspective divide in the fragment stage
+  vView = mv.xyz;
+  vec3 n = normalize(mat3(modelMatrix) * objectNormal);
+  vLight = uShading == 2 ? vec3(1.0) : uAmbient + uL1Col * max(dot(n, uL1Dir), 0.0) + uL2Col * max(dot(n, uL2Dir), 0.0);
+  #ifdef USE_COLOR
+  vCol = color.rgb;
+  #endif
+}`;
+
+const PS1_FRAG = /* glsl */ `
+uniform sampler2D map; uniform float uHasMap; uniform float uCutout; uniform vec3 uTint;
+uniform float uAffine; uniform float uDither; uniform float uBits; uniform int uShading;
+uniform vec3 uAmbient; uniform vec3 uL1Dir; uniform vec3 uL1Col; uniform vec3 uL2Dir; uniform vec3 uL2Col;
+varying vec2 vUv; varying vec3 vUvw; varying vec3 vLight; varying vec3 vView;
+#ifdef USE_COLOR
+varying vec3 vCol;
+#endif
+const float DITHER[16] = float[16](${PS1_DITHER.map((v) => v.toFixed(1)).join(', ')});
+void main() {
+  // Affine mapping: UVs interpolated in screen space, with no depth correction.
+  vec2 st = mix(vUv, vUvw.xy / vUvw.z, uAffine);
+  vec4 tex = vec4(1.0);
+  if (uHasMap > 0.5) {
+    tex = texture2D(map, st);
+    if (uCutout > 0.5 && tex.a < 0.5) discard;
+  }
+  vec3 light = vLight;
+  if (uShading == 1) {
+    vec3 fn = normalize(cross(dFdx(vView), dFdy(vView)));
+    vec3 wn = normalize(fn * mat3(viewMatrix));
+    light = uAmbient + uL1Col * max(dot(wn, uL1Dir), 0.0) + uL2Col * max(dot(wn, uL2Dir), 0.0);
+  }
+  vec3 c = tex.rgb * uTint * light;
+  #ifdef USE_COLOR
+  c *= vCol;
+  #endif
+  vec3 c8 = clamp(c, 0.0, 1.0) * 255.0;
+  if (uDither > 0.5) {
+    ivec2 p = ivec2(gl_FragCoord.xy) & 3;
+    c8 += DITHER[p.y * 4 + p.x];
+  }
+  c8 = clamp(c8, 0.0, 255.0);
+  c = uBits < 7.5 ? floor(c8 / 8.0) / 31.0 : c8 / 255.0;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+function ps1Material({ map = null, tint = [1, 1, 1], cutout = false, side = THREE.FrontSide, vcolor = false, shading = U.uShading }) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      ...U, uShading: shading,
+      map: { value: map }, uHasMap: { value: map ? 1 : 0 }, uCutout: { value: cutout ? 1 : 0 },
+      uTint: { value: new THREE.Vector3(tint[0], tint[1], tint[2]) },
+    },
+    vertexShader: PS1_VERT, fragmentShader: PS1_FRAG, side, vertexColors: vcolor,
+  });
+}
+
+/* =====================================================================
+   5. Viewport
+   ===================================================================== */
+
+const canvas = $('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 4 / 3, 0.05, 200);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.12; controls.minDistance = 0.6; controls.maxDistance = 30;
+const pivot = new THREE.Group(), holder = new THREE.Group();
+pivot.add(holder); scene.add(pivot);
+const hemi = new THREE.HemisphereLight(0xffffff, 0x50505c, 2.2);
+const sun = new THREE.DirectionalLight(0xffffff, 2.0); sun.position.set(4.5, 7.5, 6);
+scene.add(hemi, sun);
+
+const RAW_BG = new THREE.Color().setRGB(24 / 255, 24 / 255, 40 / 255);
+const ORIG_BG = new THREE.Color(0x1c1d26);
+
+// A checker floor: big polygons make the affine warp and the pixel snapping easy to see.
+const floor = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 2;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = 'rgb(40,40,64)'; cx.fillRect(0, 0, 2, 2);
+  cx.fillStyle = 'rgb(32,32,48)'; cx.fillRect(0, 0, 1, 1); cx.fillRect(1, 1, 1, 1);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, 1);
+  const geo = new THREE.PlaneGeometry(7, 7, 6, 6).rotateX(-Math.PI / 2);
+  const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 5, uv.getY(i) * 5);
+  const mesh = new THREE.Mesh(geo, ps1Material({ map: tex, shading: { value: 2 } }));
+  mesh.position.y = -0.002; mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+})();
+
+let rt = new THREE.WebGLRenderTarget(320, 240, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
+const blitMat = new THREE.ShaderMaterial({
+  uniforms: { t: { value: rt.texture } }, depthTest: false, depthWrite: false,
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: 'uniform sampler2D t; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(t, vUv).rgb, 1.0); }',
+});
+const blitScene = new THREE.Scene(); const blitCam = new THREE.Camera();
+{ const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blitMat); quad.frustumCulled = false; blitScene.add(quad); }
+
+function setResolution(res) {
+  const [w, h] = res.split('x').map(Number);
+  if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+  U.uRes.value.set(w, h);
+}
+function fitCanvas() {
+  const r = $('crt').getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) renderer.setSize(w, h, false);
+}
+new ResizeObserver(fitCanvas).observe($('crt'));
+
+/* =====================================================================
+   6. Model state
+   ===================================================================== */
+
+let model = null, mixer = null, animT = 0, page = null;
+const texFiles = new Map();
+let lastFbx = null;
+
+function disposePage() {
+  if (!page) return;
+  page.tex?.dispose(); page.exportTex?.dispose();
+  page.tex = page.exportTex = null;
+  if (model) for (const e of model.entries) { e.psMat?.dispose(); e.exportMat?.dispose(); e.psMat = e.exportMat = null; }
+}
+function disposeModel() {
+  if (!model) return;
+  disposePage(); page = null;
+  for (const e of model.entries) { e.psGeo?.dispose(); e.origGeometry.dispose(); }
+  holder.remove(model.root);
+  model = null; mixer = null;
+}
+
+// Turn a loaded object into the structure the pipeline works on.
+function adoptModel(root, name, missing = []) {
+  disposeModel();
+  root.traverse((o) => { if (o.isLight || o.isCamera) o.visible = false; });
+  root.updateMatrixWorld(true);
+  const m = { name, root, clips: root.animations || [], entries: [], materials: [], matXform: [], matItem: [], items: [], missing, triCount: 0, worldSize: 1 };
+  const meshes = [];
+  root.traverse((o) => { if (o.isMesh && o.geometry?.attributes?.position && o.visible) meshes.push(o); });
+  const itemKey = new Map();
+  for (const mesh of meshes) {
+    const g = mesh.geometry;
+    if ((g.index ? g.index.count : g.attributes.position.count) < 3) continue;
+    const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((mt) => mt || new THREE.MeshPhongMaterial({ color: 0x999999 }));
+    const entry = {
+      mesh, origGeometry: g, origMaterial: mesh.material,
+      skinned: !!(mesh.isSkinnedMesh && g.attributes.skinIndex && g.attributes.skinWeight),
+      useVColor: !!g.attributes.color && mats.every((mt) => mt.vertexColors),
+      doubleSided: mats.some((mt) => mt.side === THREE.DoubleSide),
+      mats: [], prep: null, low: null, psGeo: null, psMat: null, exportMat: null, scale: 1, localUnit: 1, outTris: 0, outVerts: 0,
+    };
+    for (const mt of mats) {
+      let gi = m.materials.indexOf(mt);
+      if (gi < 0) {
+        gi = m.materials.length; m.materials.push(mt);
+        const hasMap = imageUsable(mt.map);
+        const col = mt.color ? mt.color.clone().convertLinearToSRGB() : new THREE.Color(0.6, 0.6, 0.6);
+        let rgb = [col.r, col.g, col.b];
+        // In FBX a connected texture replaces the diffuse color (3ds Max writes a default grey there), so no tint.
+        if (hasMap) { rgb = [1, 1, 1]; if (mt.color) mt.color.setRGB(1, 1, 1); }
+        const key = (hasMap ? 'T' + mt.map.source.uuid : 'C') + '|' + rgb.map((v) => Math.round(v * 255)).join(',');
+        let ii = itemKey.get(key);
+        if (ii === undefined) { ii = m.items.length; itemKey.set(key, ii); m.items.push({ map: hasMap ? mt.map : null, color: rgb, mips: null }); }
+        m.matItem[gi] = ii;
+        m.matXform[gi] = hasMap ? [mt.map.repeat.x, mt.map.repeat.y, mt.map.offset.x, mt.map.offset.y] : [1, 1, 0, 0];
+      }
+      entry.mats.push(gi);
+    }
+    mesh.frustumCulled = false;
+    m.entries.push(entry);
+  }
+  if (!m.entries.length) throw new Error('This file has no meshes to convert. It may hold only a skeleton or an animation.');
+  const heavy = m.entries.reduce((n, e) => n + (e.origGeometry.index ? e.origGeometry.index.count : e.origGeometry.attributes.position.count) / 3, 0);
+  if (heavy > 3e6) throw new Error(`It has ${fmt(heavy)} triangles, which is more than a browser tab can decimate. Reduce it below 3 million in your 3D app first.`);
+
+  const box = new THREE.Box3(), tmp = new THREE.Box3(), sz = new THREE.Vector3();
+  for (const e of m.entries) {
+    tmp.setFromObject(e.mesh); box.union(tmp);
+    const g = e.origGeometry; g.computeBoundingBox();
+    const local = Math.max(...g.boundingBox.getSize(sz).toArray()) || 1, world = Math.max(...tmp.getSize(sz).toArray()) || local;
+    e.scale = world / local; // local units to world units
+    m.triCount += Math.floor((g.index ? g.index.count : g.attributes.position.count) / 3);
+  }
+  m.worldSize = Math.max(...box.getSize(sz).toArray()) || 1;
+  for (const e of m.entries) e.localUnit = m.worldSize / e.scale;
+
+  pivot.scale.setScalar(2 / m.worldSize); pivot.rotation.y = 0;
+  holder.position.set(0, 0, 0);
+  holder.add(root);
+  model = m;
+  animT = 0;
+  mixer = m.clips.length ? new THREE.AnimationMixer(root) : null;
+  S.clip = 0;
+  m.hip = null;
+  if (mixer) {
+    root.traverse((o) => { if (!m.hip && o.isBone) m.hip = o; });
+    mixer.clipAction(m.clips[0]).play(); mixer.setTime(0); // frame the pose it will actually be seen in, not the T-pose
+    root.updateMatrixWorld(true);
+    for (const e of m.entries) if (e.skinned) e.mesh.computeBoundingBox();
+  }
+  frameModel();
+  if (mixer) playClip(0);
+  return m;
+}
+
+// Stand the model on the floor, centered, about two units tall, and aim the camera at it.
+function frameModel() {
+  const box = new THREE.Box3(), sz = new THREE.Vector3(), k = pivot.scale.x;
+  holder.position.set(0, 0, 0); pivot.updateMatrixWorld(true);
+  for (const e of model.entries) box.expandByObject(e.mesh);
+  box.min.divideScalar(k); box.max.divideScalar(k); // back to model units
+  const center = box.getCenter(new THREE.Vector3());
+  holder.position.set(-center.x, -box.min.y, -center.z);
+  model.holderHome = holder.position.clone();
+  box.getSize(sz);
+  const hgt = sz.y * k, wide = Math.max(sz.x, sz.z) * k, half = THREE.MathUtils.degToRad(camera.fov / 2);
+  const dist = Math.max(hgt / 2 / Math.tan(half), wide / 2 / (Math.tan(half) * camera.aspect)) * 1.25 + wide / 2;
+  controls.target.set(0, hgt * 0.5, 0);
+  camera.position.set(dist * 0.4, hgt * 0.5 + dist * 0.14, dist * 0.905);
+  camera.near = Math.max(0.02, dist / 200); camera.far = dist * 20; camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function playClip(i) {
+  if (!mixer || !model.clips[i]) return;
+  mixer.stopAllAction();
+  mixer.clipAction(model.clips[i]).reset().play();
+  animT = 0;
+  // Does this clip walk the character away? If so the preview pins the hips so it stays in frame.
+  model.rootMotion = false; model.hipHome = null;
+  if (model.hip) {
+    holder.position.copy(model.holderHome);
+    const at = (t) => { mixer.setTime(t); holder.updateMatrixWorld(true); return pivot.worldToLocal(model.hip.getWorldPosition(new THREE.Vector3())); };
+    const d = model.clips[i].duration, p0 = at(0), p1 = at(d * 0.5), p2 = at(d * 0.97);
+    model.rootMotion = Math.max(Math.hypot(p1.x - p0.x, p1.z - p0.z), Math.hypot(p2.x - p0.x, p2.z - p0.z)) > 0.3 * model.worldSize;
+    model.hipHome = p0;
+    mixer.setTime(0);
+  }
+}
+
+/* =====================================================================
+   7. Rebuild stages: mesh -> page -> palette -> geometry
+   ===================================================================== */
+
+function stageMesh() {
+  const total = model.entries.reduce((sum, e) => sum + (e.prep ??= prepEntry(model, e)).tris, 0) || 1;
+  for (const e of model.entries) {
+    const share = Math.max(Math.min(e.prep.tris, 4), Math.round((S.tris * e.prep.tris) / total));
+    e.low = chartFaces(e.prep, simplifyPoints(e.prep, share, e.skinned));
+  }
+}
+
+function stagePage() {
+  disposePage();
+  const N = S.texSize, patches = layoutPage(model, N);
+  page = { N, patches, rgba: bakePage(model, N), coverage: bakePage.coverage, canvas: null, tex: null, exportTex: null, palette: null, cutout: false };
+}
+
+function stagePalette() {
+  disposePage();
+  const img = { data: page.rgba.slice(), w: page.N, h: page.N }, q = quantize(img, S.colors, S.texDither);
+  page.canvas = toCanvas(img); page.palette = q.palette; page.cutout = q.cutout;
+  const filter = S.filter === 'bilinear' ? THREE.LinearFilter : THREE.NearestFilter;
+  const mk = (space) => {
+    const t = new THREE.CanvasTexture(page.canvas);
+    t.magFilter = t.minFilter = filter; t.generateMipmaps = false; t.colorSpace = space; t.name = 'ps1_page';
+    return t;
+  };
+  page.tex = mk(THREE.NoColorSpace); page.exportTex = mk(THREE.SRGBColorSpace);
+  const shared = new Map(); // one export material per sidedness, so the file carries one material where it can
+  for (const e of model.entries) {
+    const side = e.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
+    e.psMat = ps1Material({ map: page.tex, cutout: page.cutout, side });
+    if (!shared.has(side)) {
+      const mt = new THREE.MeshStandardMaterial({ map: page.exportTex, roughness: 1, metalness: 0, side, alphaTest: page.cutout ? 0.5 : 0 });
+      mt.name = side === THREE.DoubleSide ? 'ps1_page_double' : 'ps1_page'; shared.set(side, mt);
+    }
+    e.exportMat = shared.get(side);
+  }
+}
+
+// Output vertices are (point, patch) pairs: shared inside a patch, split where two patches meet.
+function buildGeometry(e) {
+  const prep = e.prep, low = e.low, pts = prep.points, N = page.N, nCh = low.charts.length, { Nn, idx, P } = prep, tris = low.tris;
+  // PS1 models stored vertices as whole numbers. Snap to that grid, but leave alone any vertex whose
+  // triangle would collapse, so fingers and other small parts survive a coarse grid.
+  const step = S.grid ? e.localUnit / S.grid : 0;
+  let keep = null;
+  if (step) {
+    keep = new Uint8Array(prep.m);
+    const q = (p, k) => Math.round(pts[p * 3 + k] / step), same = (a, b) => q(a, 0) === q(b, 0) && q(a, 1) === q(b, 1) && q(a, 2) === q(b, 2);
+    for (let f = 0; f < low.nF; f++) {
+      const a = tris[f * 3], b = tris[f * 3 + 1], c = tris[f * 3 + 2];
+      if (same(a, b) || same(b, c) || same(a, c)) keep[a] = keep[b] = keep[c] = 1;
+    }
+  }
+  const coord = (p, k) => (step && !keep[p] ? Math.round(pts[p * 3 + k] / step) * step : pts[p * 3 + k]);
+  const ref = new Map();
+  for (let f = 0; f < low.nF; f++) for (let k = 0; k < 3; k++) {
+    const key = tris[f * 3 + k] * nCh + low.chartOf[f];
+    let r = ref.get(key); if (!r) ref.set(key, (r = [0, 0, 0, -1]));
+    r[0] += low.fn[f * 3] * low.area[f]; r[1] += low.fn[f * 3 + 1] * low.area[f]; r[2] += low.fn[f * 3 + 2] * low.area[f];
+  }
+  const pos = [], nor = [], uv = [], si = [], sw = [], index = [];
+  let count = 0;
+  for (let f = 0; f < low.nF; f++) {
+    const ci = low.chartOf[f], ch = low.charts[ci];
+    for (let k = 0; k < 3; k++) {
+      const p = tris[f * 3 + k], r = ref.get(p * nCh + ci);
+      if (r[3] < 0) {
+        r[3] = count++;
+        pos.push(coord(p, 0), coord(p, 1), coord(p, 2));
+        uv.push(chartX(ch, pts[p * 3 + ch.iu], pts[p * 3 + ch.iv]) / N, 1 - chartY(ch, pts[p * 3 + ch.iu], pts[p * 3 + ch.iv]) / N);
+        // Shade with the original model's normals, keeping only the ones on this patch's side of a crease.
+        const rl = Math.hypot(r[0], r[1], r[2]) || 1, rx = r[0] / rl, ry = r[1] / rl, rz = r[2] / rl;
+        let sx = 0, sy = 0, sz = 0;
+        for (let i = prep.ptStart[p], end = prep.ptStart[p + 1]; i < end; i++) {
+          const c = prep.ptCorners[i];
+          let nx, ny, nz;
+          if (Nn) { const v = (idx ? idx[c] : c) * 3; nx = Nn[v]; ny = Nn[v + 1]; nz = Nn[v + 2]; }
+          else {
+            const t = (c / 3) | 0, a = (idx ? idx[t * 3] : t * 3) * 3, b = (idx ? idx[t * 3 + 1] : t * 3 + 1) * 3, d = (idx ? idx[t * 3 + 2] : t * 3 + 2) * 3;
+            const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[d] - P[a], vy = P[d + 1] - P[a + 1], vz = P[d + 2] - P[a + 2];
+            nx = uy * vz - uz * vy; ny = uz * vx - ux * vz; nz = ux * vy - uy * vx;
+          }
+          const nl = Math.hypot(nx, ny, nz);
+          if (nl > 0 && (nx * rx + ny * ry + nz * rz) / nl > 0.35) { sx += nx / nl; sy += ny / nl; sz += nz / nl; }
+        }
+        const sl = Math.hypot(sx, sy, sz);
+        if (sl > 1e-6) nor.push(sx / sl, sy / sl, sz / sl); else nor.push(rx, ry, rz);
+        if (prep.skinIndex) for (let j = 0; j < 4; j++) { si.push(prep.skinIndex[p * 4 + j]); sw.push(prep.skinWeight[p * 4 + j]); }
+      }
+      index.push(r[3]);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2));
+  if (prep.skinIndex) {
+    g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(si), 4));
+    g.setAttribute('skinWeight', new THREE.BufferAttribute(new Float32Array(sw), 4));
+  }
+  g.setIndex(new THREE.BufferAttribute(count > 65535 ? new Uint32Array(index) : new Uint16Array(index), 1));
+  e.psGeo?.dispose();
+  e.psGeo = g; e.outTris = index.length / 3; e.outVerts = count;
+}
+
+function applyView() {
+  const ps1 = S.view === 'ps1';
+  for (const e of model.entries) {
+    e.mesh.geometry = ps1 ? e.psGeo : e.origGeometry;
+    e.mesh.material = ps1 ? e.psMat : e.origMaterial;
+  }
+  floor.visible = ps1;
+  refreshReadouts();
+}
+
+function applyRenderSettings() {
+  setResolution(S.res);
+  U.uJitter.value = S.jitter; U.uAffine.value = S.affine;
+  U.uDither.value = S.dither ? 1 : 0; U.uBits.value = S.dither ? 5 : 8;
+  U.uShading.value = { gouraud: 0, flat: 1, unlit: 2 }[S.shading] ?? 0;
+  if (page && page.tex) {
+    const f = S.filter === 'bilinear' ? THREE.LinearFilter : THREE.NearestFilter;
+    for (const t of [page.tex, page.exportTex]) if (t.magFilter !== f) { t.magFilter = t.minFilter = f; t.needsUpdate = true; }
+  }
+  refreshReadouts();
+}
+
+// level 0: triangle budget changed; 1: page size; 2: palette or dither; 3: vertex grid only.
+function rebuild(level = 0) {
+  if (!model) return;
+  if (level <= 0) stageMesh();
+  if (level <= 1) stagePage();
+  if (level <= 2) stagePalette();
+  for (const e of model.entries) buildGeometry(e);
+  applyView();
+  applyRenderSettings();
+}
+
+/* =====================================================================
+   8. Loading
+   ===================================================================== */
+
+const baseName = (p) => decodeURIComponent(String(p).split(/[\\/]/).pop().split('?')[0]).toLowerCase();
+const stem = (n) => n.replace(/\.[^.]+$/, '');
+
+function findTextureFile(url) {
+  const n = baseName(url);
+  if (texFiles.has(n)) return texFiles.get(n);
+  for (const [k, f] of texFiles) if (stem(k) === stem(n)) return f;
+  return null;
+}
+
+// FBXLoader asks this for every texture the file names. Images the person supplied are matched by file
+// name; anything not supplied becomes an empty placeholder instead of a network request. Nothing here
+// uses fetch, so it also works on pages whose security policy only allows images from blob: URLs.
+class TextureRouter extends THREE.Loader {
+  constructor(manager, tga, made, blobs) { super(manager); this.tgaLoader = new TGALoader(); this.imgLoader = new THREE.TextureLoader(manager); this.tga = tga; this.made = made; this.blobs = blobs; }
+  load(url, onLoad, onProgress, onError) {
+    let blob = null, tga = this.tga;
+    if (/^blob:/.test(url)) blob = this.blobs.get(url) || null;
+    else if (!/^data:/.test(url)) {
+      blob = findTextureFile(url);
+      if (!blob) { const t = new THREE.Texture(); t.userData.missingFile = baseName(url); return t; }
+      tga = /\.tga$/i.test(blob.name);
+    }
+    if (tga && blob) return this.loadTGA(blob, url);
+    let src = url;
+    if (blob && !/^blob:/.test(url)) { src = URL.createObjectURL(blob); this.made.push(src); }
+    this.imgLoader.setPath('');
+    return this.imgLoader.load(src, onLoad, onProgress, onError);
+  }
+  loadTGA(blob, url) {
+    const tex = new THREE.DataTexture(), m = this.manager;
+    m.itemStart(url);
+    blob.arrayBuffer().then((buf) => {
+      const d = this.tgaLoader.parse(buf);
+      tex.image = { data: d.data, width: d.width, height: d.height };
+      tex.flipY = d.flipY ?? true; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false; tex.needsUpdate = true;
+      m.itemEnd(url);
+    }).catch(() => { m.itemError(url); m.itemEnd(url); });
+    return tex;
+  }
+}
+
+async function parseFBX(buffer) {
+  const manager = new THREE.LoadingManager(), made = [], blobs = new Map();
+  let started = false, finish;
+  const done = new Promise((r) => { finish = r; });
+  manager.onStart = () => { started = true; };
+  manager.onLoad = () => finish();
+  manager.addHandler(/\.tga$/i, new TextureRouter(manager, true, made, blobs));
+  manager.addHandler(/./, new TextureRouter(manager, false, made, blobs));
+  // Remember the blobs FBXLoader makes for embedded textures, so embedded TGAs can be decoded directly.
+  const createURL = URL.createObjectURL;
+  URL.createObjectURL = (b) => { const u = createURL.call(URL, b); blobs.set(u, b); return u; };
+  let root;
+  try { root = new FBXLoader(manager).parse(buffer, ''); } finally { URL.createObjectURL = createURL; }
+  if (started) await Promise.race([done, new Promise((r) => setTimeout(r, 20000))]);
+  await nextFrame();
+  for (const u of made) URL.revokeObjectURL(u);
+  // Only color textures matter here; a missing normal or gloss map is not worth a warning.
+  const missing = new Set();
+  root.traverse((o) => { if (o.isMesh) for (const mt of [].concat(o.material)) if (mt && mt.map && mt.map.userData.missingFile) missing.add(mt.map.userData.missingFile); });
+  // Drop tracks this tool cannot carry over (blend shapes) and clips with nothing left in them.
+  root.animations = (root.animations || []).map((clip) => {
+    clip.tracks = clip.tracks.filter((t) => !/morphTargetInfluences/.test(t.name));
+    clip.optimize(); // also removes keys that share a timestamp, which glTF forbids
+    return clip.resetDuration();
+  }).filter((clip) => clip.tracks.length && clip.duration > 1e-4);
+  return { root, missing: [...missing] };
+}
+
+async function openFiles(fileList) {
+  const files = [...fileList];
+  const fbx = files.find((f) => /\.fbx$/i.test(f.name));
+  const images = files.filter((f) => /\.(png|jpe?g|bmp|gif|webp|tga)$/i.test(f.name));
+  for (const f of images) texFiles.set(f.name.toLowerCase(), f);
+  if (!fbx && !images.length) {
+    const other = files[0] ? files[0].name.split('.').pop().toUpperCase() : '';
+    return setStatus(`Demaker reads FBX files. ${other ? other + ' files are not supported: export an FBX from your 3D app.' : ''}`, 'err');
+  }
+  try {
+    if (fbx) lastFbx = { name: fbx.name, buffer: await fbx.arrayBuffer() };
+    if (!lastFbx) return setStatus(`${images.length} texture${images.length > 1 ? 's' : ''} ready. Now open the FBX they belong to.`);
+    showVeil('READING ' + lastFbx.name.toUpperCase());
+    setStatus('Reading ' + lastFbx.name, 'busy');
+    await nextFrame(); await nextFrame();
+    const { root, missing } = await parseFBX(lastFbx.buffer.slice(0));
+    const m = adoptModel(root, stem(lastFbx.name), missing);
+    showVeil('CONVERTING');
+    await nextFrame(); await nextFrame();
+    rebuild(0);
+    syncControls();
+    hideVeil();
+    const bits = [`${fmt(m.triCount)} triangles`];
+    if (m.entries.some((e) => e.skinned)) bits.push('rigged');
+    if (m.clips.length) bits.push(`${m.clips.length} animation${m.clips.length > 1 ? 's' : ''}`);
+    let msg = `${lastFbx.name}: ${bits.join(', ')}.`, kind = '';
+    if (missing.length) { msg += ` Missing ${missing.length} texture${missing.length > 1 ? 's' : ''} (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}). Open the image files to add them.`; kind = 'err'; }
+    setStatus(msg, kind);
+  } catch (err) {
+    console.error(err);
+    hideVeil();
+    const text = String(err && err.message ? err.message : err);
+    if (!model) loadSample();
+    setStatus(/version not supported|Unknown format/i.test(text) ? 'This FBX is too old to read (pre-2011 format). Re-export it as FBX 2013 or newer.' : 'Could not convert this file. ' + text, 'err');
+  }
+}
+
+/* ---------- built-in sample: a procedural courier, so the page opens on a working conversion ---------- */
+
+const REG = { head: [0, 0, 512, 256], torso: [512, 0, 512, 384], arm: [0, 256, 192, 384], leg: [192, 256, 320, 512], pack: [512, 384, 384, 384], boot: [896, 384, 128, 192], hand: [896, 576, 128, 192], roll: [0, 768, 512, 256] };
+
+function paintSample() {
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const x = c.getContext('2d');
+  const F = (col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+  const box = (r, fn) => { x.save(); x.beginPath(); x.rect(r[0], r[1], r[2], r[3]); x.clip(); x.translate(r[0], r[1]); fn(r[2], r[3]); x.restore(); };
+  const shadeV = (w, h, top, bot) => { const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, top); g.addColorStop(1, bot); x.fillStyle = g; x.fillRect(0, 0, w, h); };
+  const shadeH = (w, h, a) => { const g = x.createLinearGradient(0, 0, w, 0); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.28, 'rgba(0,0,0,0)'); g.addColorStop(0.72, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${a})`); x.fillStyle = g; x.fillRect(0, 0, w, h); };
+  const SUIT = '#c96f22', DARK = '#353a45', BLACK = '#1f2228', PALE = '#ece5cc', STEEL = '#aeb2ba';
+  F('#444', 0, 0, 1024, 1024);
+  box(REG.head, (w, h) => {
+    const cx = w / 2;
+    F('#c9946f', 0, 0, w, h);
+    F('rgba(140,70,45,.2)', cx - 118, 120, 44, 70); F('rgba(140,70,45,.2)', cx + 74, 120, 44, 70);
+    F('rgba(40,30,25,.24)', cx - 96, 172, 192, 84);
+    F('#b27f5e', cx - 136, 112, 14, 44); F('#b27f5e', cx + 122, 112, 14, 44);
+    F('#2a1f1a', 0, 0, w, 74); F('#2a1f1a', 0, 0, cx - 150, h * 0.84); F('#2a1f1a', cx + 150, 0, w - cx - 150, h * 0.84);
+    F('#2a1f1a', cx - 150, 74, 24, 54); F('#2a1f1a', cx + 126, 74, 24, 54);
+    for (let i = 0; i < 26; i++) F('rgba(120,90,70,.22)', (i * 37) % w, 6 + ((i * 13) % 50), 22, 3);
+    F('#2a1f1a', cx - 72, 98, 48, 9); F('#2a1f1a', cx + 24, 98, 48, 9);
+    F('#e9e4da', cx - 68, 114, 40, 16); F('#e9e4da', cx + 28, 114, 40, 16);
+    F('#2f4a5a', cx - 54, 114, 15, 16); F('#2f4a5a', cx + 39, 114, 15, 16);
+    F('#1b1512', cx - 68, 111, 40, 4); F('#1b1512', cx + 28, 111, 40, 4);
+    F('rgba(90,45,30,.5)', cx - 5, 122, 10, 42); F('rgba(90,45,30,.55)', cx - 15, 160, 30, 6);
+    F('#7d3f37', cx - 30, 190, 60, 8); F('rgba(255,205,185,.3)', cx - 22, 200, 44, 5);
+    F('rgba(0,0,0,.22)', 0, 234, w, 22);
+  });
+  box(REG.torso, (w, h) => {
+    const cx = w / 2;
+    F(SUIT, 0, 0, w, h);
+    F(DARK, 0, 0, 86, h); F(DARK, w - 86, 0, 86, h);
+    F('#2b2f38', 86, 0, w - 172, 36);
+    F(PALE, 86, 198, w - 172, 18); F('rgba(0,0,0,.35)', 86, 194, w - 172, 3); F('rgba(0,0,0,.35)', 86, 217, w - 172, 3);
+    F('rgba(0,0,0,.16)', cx + 40, 92, 92, 72); F('#a9591a', cx + 40, 92, 92, 20);
+    x.strokeStyle = '#7a3f10'; x.lineWidth = 3; x.strokeRect(cx + 40, 92, 92, 72);
+    F(PALE, cx - 122, 96, 56, 42); F('#d4401c', cx - 114, 104, 40, 9); F(DARK, cx - 114, 120, 27, 7);
+    F(BLACK, 130, 0, 30, 304); F(BLACK, w - 160, 0, 30, 304);
+    F(STEEL, 126, 140, 38, 18); F(STEEL, w - 164, 140, 38, 18);
+    F('#1c1d22', cx - 4, 36, 8, h - 98);
+    for (let y = 40; y < h - 66; y += 12) F('#8d8f96', cx - 2, y, 4, 5);
+    F(BLACK, 0, 322, w, 44); F('#4a3a2a', 150, 316, 62, 56); F('#4a3a2a', w - 212, 316, 62, 56);
+    F('rgba(0,0,0,.3)', 150, 334, 62, 3); F('rgba(0,0,0,.3)', w - 212, 334, 62, 3);
+    F('#c9ccd2', cx - 30, 326, 60, 36); F('#55585f', cx - 18, 334, 36, 20);
+    shadeV(w, h, 'rgba(255,255,255,.08)', 'rgba(0,0,0,.3)'); shadeH(w, h, 0.22);
+  });
+  box(REG.arm, (w, h) => {
+    F(SUIT, 0, 0, w, 192); F(DARK, 40, 24, 112, 72); F(PALE, 40, 54, 112, 10);
+    F('rgba(0,0,0,.3)', 0, 186, w, 6);
+    F(DARK, 0, 192, w, 192); F('#59606d', 30, 220, 132, 112); F('rgba(255,255,255,.12)', 30, 220, 132, 8);
+    F(PALE, 0, 352, w, 12); F(BLACK, 0, 364, w, 20);
+    shadeH(w, h, 0.28);
+  });
+  box(REG.leg, (w, h) => {
+    const cx = w / 2;
+    F('#2c323d', 0, 0, w, h); F(SUIT, 0, 96, w, 18);
+    F('#3a4250', cx - 50, 130, 100, 82); x.strokeStyle = '#1c2028'; x.lineWidth = 3; x.strokeRect(cx - 50, 130, 100, 82); F('#1c2028', cx - 50, 150, 100, 3);
+    F('rgba(0,0,0,.3)', 0, 250, w, 6);
+    F('#59606d', cx - 70, 262, 140, 72); F('rgba(255,255,255,.14)', cx - 70, 262, 140, 8);
+    F('#434b59', cx - 60, 352, 120, 122); F('#1a1715', 0, 490, w, 22);
+    shadeH(w, h, 0.3);
+  });
+  box(REG.boot, (w, h) => { F('#1a1715', 0, 0, w, h); F('#8a8478', 0, 150, w, 42); for (let i = 0; i < 4; i++) F('#6a655c', 44, 30 + i * 22, 40, 6); });
+  box(REG.hand, (w, h) => { F(BLACK, 0, 0, w, h); F(SUIT, 0, 70, w, 22); F('rgba(255,255,255,.08)', 0, 0, w, 40); });
+  box(REG.pack, (w, h) => {
+    F('#aaa58f', 0, 0, w, h);
+    x.strokeStyle = '#55584f'; x.lineWidth = 28; x.strokeRect(0, 0, w, h);
+    F('#2a2d33', 0, 108, w, 26); F('#2a2d33', 0, 250, w, 26); F(STEEL, 60, 104, 34, 34); F(STEEL, w - 94, 246, 34, 34);
+    F(PALE, 120, 150, 144, 86); F('#353a45', 132, 162, 90, 10); F('#353a45', 132, 182, 120, 8); F('#353a45', 132, 198, 70, 8); F('#d4401c', 132, 214, 46, 12);
+    for (let i = 0; i < 12; i++) F(i % 2 ? '#1c1d22' : '#d4a017', i * 32, 318, 32, 30);
+    x.fillStyle = '#d4401c'; x.beginPath(); x.arc(326, 54, 15, 0, 7); x.fill();
+    shadeV(w, h, 'rgba(255,255,255,.1)', 'rgba(0,0,0,.25)');
+  });
+  box(REG.roll, (w, h) => { F('#5d6247', 0, 0, w, h); for (let i = 0; i < 8; i++) F('rgba(0,0,0,.18)', 0, i * 34 + 10, w, 6); F('#2a2d33', 120, 0, 26, h); F('#2a2d33', w - 146, 0, 26, h); });
+  const id = x.getImageData(0, 0, 1024, 1024), d = id.data;
+  let s = 20261111;
+  for (let i = 0; i < d.length; i += 4) { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; const n = ((s >>> 24) - 128) * 0.1; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  x.putImageData(id, 0, 0);
+  return c;
+}
+
+function buildSample() {
+  const tex = new THREE.CanvasTexture(paintSample()); tex.colorSpace = THREE.SRGBColorSpace; tex.name = 'courier';
+  const parts = [];
+  const sub = (r, a, b) => [r[0], r[1] + r[3] * a, r[2], r[3] * (b - a)];
+  const add = (geo, r, px, py, pz, rx = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (r[0] + uv.getX(i) * r[2]) / 1024, 1 - (r[1] + (1 - uv.getY(i)) * r[3]) / 1024);
+    geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, rz)), new THREE.Vector3(sx, sy, sz)));
+    parts.push(geo);
+  };
+  const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 10, 40, 6).rotateY(-Math.PI / 2);
+  const sph = (r) => new THREE.SphereGeometry(r, 48, 32).rotateY(-Math.PI / 2);
+  add(cap(0.165, 0.3), REG.torso, 0, 1.22, 0, 0, 0, 1.2, 1, 0.8);
+  add(sph(0.17), sub(REG.leg, 0, 0.18), 0, 0.96, 0, 0, 0, 1.15, 0.72, 0.82);
+  add(sph(0.118), REG.head, 0, 1.635, 0.012, 0, 0, 0.95, 1.08, 1);
+  add(new THREE.CylinderGeometry(0.052, 0.06, 0.1, 24, 2).rotateY(-Math.PI / 2), sub(REG.head, 0.9, 1), 0, 1.5, 0);
+  for (const s of [-1, 1]) {
+    add(cap(0.058, 0.2), sub(REG.arm, 0, 0.5), s * 0.262, 1.27, 0, 0, s * 0.2);
+    add(cap(0.05, 0.2), sub(REG.arm, 0.5, 1), s * 0.325, 0.985, 0.035, -0.28, s * 0.13);
+    add(sph(0.055), REG.hand, s * 0.352, 0.8, 0.085, 0, 0, 0.8, 1.15, 0.9);
+    add(cap(0.086, 0.3), sub(REG.leg, 0, 0.5), s * 0.105, 0.68, 0);
+    add(cap(0.07, 0.3), sub(REG.leg, 0.5, 1), s * 0.105, 0.31, -0.01);
+    add(sph(0.09), REG.boot, s * 0.105, 0.056, 0.05, 0, 0, 0.95, 0.62, 1.7);
+  }
+  add(new THREE.BoxGeometry(0.34, 0.46, 0.17, 12, 16, 6), REG.pack, 0, 1.25, -0.21);
+  add(cap(0.066, 0.26), REG.roll, 0, 1.535, -0.2, 0, Math.PI / 2);
+  const mesh = new THREE.Mesh(mergeGeometries(parts, false), new THREE.MeshPhongMaterial({ map: tex, shininess: 8 }));
+  mesh.name = 'Courier';
+  const root = new THREE.Group(); root.name = 'Sample'; root.add(mesh); root.animations = [];
+  return root;
+}
+
+function loadSample() {
+  lastFbx = null;
+  const m = adoptModel(buildSample(), 'courier');
+  m.isSample = true;
+  rebuild(0); syncControls();
+  setStatus(`Sample model: a ${fmt(m.triCount)}-triangle courier. Open an FBX to convert your own.`);
+}
+
+/* =====================================================================
+   9. Export
+   ===================================================================== */
+
+let downloadsPromise = null;
+const inViewer = () => !!(window.claude && typeof window.claude.use === 'function');
+function getDownloads() {
+  if (!inViewer()) return Promise.resolve(undefined);
+  return (downloadsPromise ??= Promise.resolve(window.claude.use('downloads')).catch(() => null));
+}
+const canvasPNG = (cv) => new Promise((res) => cv.toBlob(async (b) => res(new Uint8Array(await b.arrayBuffer())), 'image/png'));
+
+// Rewrite the JSON chunk of a .glb (header, JSON chunk, binary chunk).
+function patchGLB(buffer, edit) {
+  const view = new DataView(buffer), jsonLen = view.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLen)));
+  edit(json);
+  let text = new TextEncoder().encode(JSON.stringify(json));
+  const pad = (4 - (text.length % 4)) % 4, rest = new Uint8Array(buffer, 20 + jsonLen);
+  const out = new Uint8Array(20 + text.length + pad + rest.length), dv = new DataView(out.buffer);
+  dv.setUint32(0, 0x46546c67, true); dv.setUint32(4, 2, true); dv.setUint32(8, out.length, true);
+  dv.setUint32(12, text.length + pad, true); dv.setUint32(16, 0x4e4f534a, true);
+  out.set(text, 20); out.fill(0x20, 20 + text.length, 20 + text.length + pad); out.set(rest, 20 + text.length + pad);
+  return out;
+}
+
+async function buildGLB() {
+  if (mixer) { mixer.setTime(0); model.root.updateMatrixWorld(true); }
+  const copy = cloneSkinned(model.root);
+  const a = [], b = [], drop = [];
+  model.root.traverse((o) => { if (o.isMesh) a.push(o); });
+  copy.traverse((o) => { if (o.isMesh) b.push(o); else if (o.isLight || o.isCamera) drop.push(o); });
+  const byMesh = new Map(model.entries.map((e) => [e.mesh, e]));
+  const scene = new THREE.Scene(); scene.name = model.name;
+  scene.add(copy);
+  copy.updateMatrixWorld(true);
+  a.forEach((o, i) => {
+    const e = byMesh.get(o), d = b[i];
+    if (!e) { drop.push(d); return; }
+    d.geometry = e.psGeo; d.material = e.exportMat;
+    if (d.isSkinnedMesh) {
+      // glTF ignores the transform of a skinned mesh, so it goes to the scene root with none (its bind matrix is kept).
+      scene.add(d); d.position.set(0, 0, 0); d.quaternion.identity(); d.scale.set(1, 1, 1); d.updateMatrix();
+    }
+  });
+  for (const o of drop) o.parent?.remove(o);
+  const glb = await new GLTFExporter().parseAsync(scene, { binary: true, animations: model.clips, onlyVisible: false });
+  return patchGLB(glb, (json) => {
+    json.asset.generator = 'Demaker (three.js GLTFExporter)';
+    for (const skin of json.skins || []) delete skin.skeleton; // optional, and FBX bone order does not guarantee a valid one
+  });
+}
+
+// A drop-in version of the preview's material for three.js projects, shipped inside the export.
+const shaderFile = () => `// PS1 material for three.js, from Demaker. MIT License.
+//
+//   import { ps1Material } from './ps1_material.js';
+//   gltf.scene.traverse((o) => { if (o.isMesh) o.material = ps1Material(o.material.map, { side: o.material.side }); });
+//
+// For the full look, render your scene into a 320x240 THREE.WebGLRenderTarget (NearestFilter) and draw
+// that to the screen. Keep resolution below equal to the size of that target.
+import * as THREE from 'three';
+
+const VERT = /* glsl */ \`${PS1_VERT}\`;
+
+const FRAG = /* glsl */ \`${PS1_FRAG}\`;
+
+export function ps1Material(map, { resolution = [320, 240], jitter = 1, affine = 1, dither = true, shading = 'gouraud', cutout = false, side = THREE.FrontSide } = {}) {
+  if (map) { map.magFilter = map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; map.colorSpace = THREE.NoColorSpace; map.needsUpdate = true; }
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      map: { value: map || null }, uHasMap: { value: map ? 1 : 0 }, uCutout: { value: cutout ? 1 : 0 }, uTint: { value: new THREE.Vector3(1, 1, 1) },
+      uRes: { value: new THREE.Vector2(resolution[0], resolution[1]) }, uJitter: { value: jitter }, uAffine: { value: affine },
+      uDither: { value: dither ? 1 : 0 }, uBits: { value: dither ? 5 : 8 }, uShading: { value: { gouraud: 0, flat: 1, unlit: 2 }[shading] ?? 0 },
+      uAmbient: { value: new THREE.Vector3(${U.uAmbient.value.toArray().join(', ')}) },
+      uL1Dir: { value: new THREE.Vector3(0.45, 0.75, 0.6).normalize() }, uL1Col: { value: new THREE.Vector3(${U.uL1Col.value.toArray().join(', ')}) },
+      uL2Dir: { value: new THREE.Vector3(-0.65, 0.15, -0.55).normalize() }, uL2Col: { value: new THREE.Vector3(${U.uL2Col.value.toArray().join(', ')}) },
+    },
+    vertexShader: VERT, fragmentShader: FRAG, side,
+  });
+}
+`;
+
+async function exportModel() {
+  if (!model) return;
+  const btn = $('exportBtn');
+  btn.disabled = true;
+  setStatus('Packing the .glb', 'busy');
+  try {
+    await nextFrame();
+    const glb = await buildGLB();
+    const name = (model.name || 'model').replace(/[^\w.-]+/g, '_') + '_ps1';
+    const outTris = model.entries.reduce((s, e) => s + e.outTris, 0);
+    const downloads = await getDownloads();
+    if (downloads === undefined) {
+      // Standalone page: hand the .glb straight to the browser.
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' })); a.download = name + '.glb';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      setStatus(`Saved ${name}.glb: ${fmt(outTris)} triangles, ${(glb.length / 1024).toFixed(0)} KB.`);
+    } else if (!downloads) {
+      setStatus('Saving files is not available in this view. Open the artifact page itself on claude.ai and export from there.', 'err');
+    } else {
+      const files = { [name + '.glb']: glb };
+      files[name + '_page.png'] = await canvasPNG(page.canvas);
+      files['ps1_material.js'] = strToU8(shaderFile());
+      files['README.txt'] = strToU8([
+        `${name}.glb, made with Demaker`, '',
+        `Triangles: ${fmt(outTris)} (from ${fmt(model.triCount)})`,
+        `Texture page: ${page.N}x${page.N}, ${S.colors === 16 ? '16 colors (4-bit CLUT)' : S.colors === 256 ? '256 colors (8-bit CLUT)' : S.colors === 32768 ? '15-bit color' : '24-bit color'}`,
+        model.clips.length ? `Animations: ${model.clips.map((c) => c.name).join(', ')}` : 'Animations: none', '',
+        `${name}_page.png is the same texture page that is embedded in the .glb.`, '',
+        'The file holds the mesh, the rig, the animations and the texture. The wobble, the texture warp and',
+        'the dither are things a PS1 did while drawing, so they live in a shader, not in the file:',
+        '  three.js: ps1_material.js in this folder is the material the Demaker preview uses.',
+        '  Unity, Godot, Unreal: use any PS1 shader with vertex snapping and affine texture mapping.',
+        '  Everywhere: nearest (point) texture filtering, no mipmaps, and a 320x240 render target.',
+      ].join('\n'));
+      const zip = zipSync(files, { level: 6 });
+      await downloads.save({ filename: name + '.zip', data: new Blob([zip]) });
+      setStatus(`Saved ${name}.zip: ${fmt(outTris)} triangles, ${(zip.length / 1024).toFixed(0)} KB.`);
+    }
+  } catch (err) {
+    const code = err && err.code;
+    if (code === 'declined') setStatus('Save cancelled.');
+    else if (code === 'rate_limited') setStatus('A save prompt is already open. Answer it, then try again.', 'err');
+    else if (code) setStatus('Saving is not available in this view. Open the artifact page itself on claude.ai and export from there.', 'err');
+    else { console.error(err); setStatus('Export failed. ' + String(err && err.message ? err.message : err), 'err'); }
+  }
+  btn.disabled = false;
+}
+
+/* =====================================================================
+   10. Interface
+   ===================================================================== */
+
+const TRI_MIN = Math.log(60), TRI_MAX = Math.log(12000);
+const GROUPS = [
+  { title: 'Mesh', note: 'baked into the file', rows: [
+    { id: 'tris', type: 'range', label: 'Triangles', min: 0, max: 1000, step: 1, read: (t) => Math.round(Math.exp(TRI_MIN + ((TRI_MAX - TRI_MIN) * t) / 1000) / 10) * 10, write: (v) => Math.round(((Math.log(clamp(v, 60, 12000)) - TRI_MIN) / (TRI_MAX - TRI_MIN)) * 1000), show: (v) => fmt(v) },
+    { id: 'grid', type: 'seg', label: 'Vertex grid', options: [[0, 'Off'], [512, '512'], [256, '256'], [128, '128'], [64, '64']], hint: 'Snaps vertices to whole units, the way 16-bit model coordinates did.' },
+  ] },
+  { title: 'Texture', note: 'baked into the file', page: true, rows: [
+    { id: 'texSize', type: 'seg', label: 'Size', options: [[32, '32'], [64, '64'], [128, '128'], [256, '256'], [512, '512']] },
+    { id: 'colors', type: 'seg', label: 'Colors', options: [[16, '16'], [256, '256'], [32768, '15-bit'], [0, 'Full']] },
+    { id: 'texDither', type: 'range', label: 'Dither', min: 0, max: 100, step: 5, read: (t) => t / 100, write: (v) => Math.round(v * 100), show: (v) => (v ? Math.round(v * 100) + '%' : 'Off') },
+  ] },
+  { title: 'Console', note: 'preview only', rows: [
+    { id: 'res', type: 'seg', label: 'Resolution', options: [['256x224', '256×224'], ['320x240', '320×240'], ['640x480', '640×480']] },
+    { id: 'jitter', type: 'range', label: 'Vertex jitter', min: 0, max: 300, step: 25, read: (t) => t / 100, write: (v) => Math.round(v * 100), show: (v) => (v === 0 ? 'Off' : v === 1 ? 'Real' : v.toFixed(2).replace(/0$/, '') + '×') },
+    { id: 'affine', type: 'range', label: 'Texture warp', min: 0, max: 100, step: 5, read: (t) => t / 100, write: (v) => Math.round(v * 100), show: (v) => (v === 0 ? 'Off' : v === 1 ? 'Real' : Math.round(v * 100) + '%') },
+    { id: 'shading', type: 'seg', label: 'Shading', options: [['gouraud', 'Gouraud'], ['flat', 'Flat'], ['unlit', 'Unlit']] },
+    { id: 'filter', type: 'seg', label: 'Filtering', options: [['nearest', 'Nearest'], ['bilinear', 'Bilinear']] },
+    { id: 'dither', type: 'switch', label: '15-bit output', on: 'On, with the hardware dither pattern', off: 'Off, full 24-bit color' },
+  ] },
+  { title: 'Animation', id: 'animGroup', note: 'every clip is kept in the file', rows: [
+    { id: 'clip', type: 'select', label: 'Clip' },
+    { id: 'fps', type: 'seg', label: 'Frame rate', options: [[0, 'Smooth'], [30, '30'], [15, '15'], [10, '10']], hint: 'Preview only. The file keeps every keyframe.' },
+    { id: 'play', type: 'switch', label: 'Playback', on: 'Playing', off: 'Paused' },
+  ] },
+];
+const CONTROLS = {};
+const RENDER_KEYS = new Set(['res', 'jitter', 'affine', 'shading', 'filter', 'dither']);
+const PRESET_KEYS = Object.keys(PRESETS.ps1a).filter((k) => k !== 'name' && k !== 'blurb');
+
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) { if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v; else if (k.startsWith('aria-') || k === 'role' || k === 'for' || k === 'type') n.setAttribute(k, v); else n[k] = v; }
+  for (const kid of kids) if (kid) n.append(kid);
+  return n;
+}
+
+function buildInterface() {
+  const pr = $('presets');
+  for (const [key, p] of Object.entries(PRESETS)) {
+    const b = el('button', { type: 'button', id: 'preset-' + key, 'aria-pressed': 'false' }, el('b', { text: p.name }), el('span', { text: p.blurb }));
+    b.addEventListener('click', () => { Object.assign(S, Object.fromEntries(PRESET_KEYS.map((k) => [k, p[k]])), { preset: key }); syncControls(); schedule(0); });
+    pr.append(b);
+  }
+  const host = $('groups');
+  for (const grp of GROUPS) {
+    const sec = el('div', { class: 'group' }, el('h2', {}, document.createTextNode(grp.title), el('small', { text: grp.note || '' })));
+    if (grp.id) sec.id = grp.id;
+    if (grp.page) {
+      sec.append(el('div', { class: 'page' }, el('canvas', { id: 'pageView', width: 8, height: 8 }), el('div', { class: 'meta' }, el('strong', { id: 'pageInfo', text: '' }), el('span', { id: 'pageSub', text: '' }), el('div', { class: 'clut', id: 'clut' }))));
+    }
+    for (const row of grp.rows) {
+      const id = 'c-' + row.id, wrap = el('div', { class: 'row' });
+      if (row.type === 'range') {
+        const input = el('input', { type: 'range', id, min: row.min, max: row.max, step: row.step }), val = el('span', { class: 'val', id: id + '-val' });
+        wrap.append(el('label', { for: id, text: row.label }), el('div', { class: 'slide' }, input, val));
+        input.addEventListener('input', () => { change(row.id, row.read(+input.value)); paintRange(row); });
+        CONTROLS[row.id] = { row, input, val };
+      } else if (row.type === 'seg') {
+        const seg = el('div', { class: 'seg wide', role: 'group', 'aria-label': row.label, id });
+        row.options.forEach(([v, text], i) => {
+          const b = el('button', { type: 'button', id: `${id}-${i}`, text, 'aria-pressed': 'false' });
+          b.addEventListener('click', () => { change(row.id, v); syncControls(); });
+          seg.append(b);
+        });
+        wrap.append(el('span', { class: 'lab', text: row.label }), seg);
+        CONTROLS[row.id] = { row, seg };
+      } else if (row.type === 'switch') {
+        const sw = el('button', { type: 'button', class: 'switch', id, role: 'switch', 'aria-checked': 'false', 'aria-label': row.label }, el('i'), el('span', { id: id + '-val' }));
+        sw.addEventListener('click', () => { change(row.id, !S[row.id]); syncControls(); });
+        wrap.append(el('span', { class: 'lab', text: row.label }), sw);
+        CONTROLS[row.id] = { row, sw };
+      } else if (row.type === 'select') {
+        const sel = el('select', { id });
+        sel.addEventListener('change', () => { S.clip = +sel.value; playClip(S.clip); });
+        wrap.append(el('label', { for: id, text: row.label }), sel);
+        CONTROLS[row.id] = { row, sel };
+      }
+      if (row.hint) wrap.append(el('p', { class: 'hint', text: row.hint }));
+      sec.append(wrap);
+    }
+    host.append(sec);
+  }
+
+  $('viewPs1').addEventListener('click', () => setView('ps1'));
+  $('viewOrig').addEventListener('click', () => setView('orig'));
+  $('spinBtn').addEventListener('click', () => { S.spin = !S.spin; syncControls(); });
+  $('exportBtn').addEventListener('click', exportModel);
+  const fileIn = $('fileIn'), openBtn = $('openBtn');
+  fileIn.addEventListener('change', () => { if (fileIn.files.length) openFiles(fileIn.files); fileIn.value = ''; });
+  openBtn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
+  const crt = $('crt');
+  let depth = 0;
+  crt.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; showVeil('DROP THE FBX AND ITS TEXTURES', true); });
+  crt.addEventListener('dragover', (e) => e.preventDefault());
+  crt.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; hideVeil(); } });
+  crt.addEventListener('drop', (e) => { e.preventDefault(); depth = 0; hideVeil(); if (e.dataTransfer?.files?.length) openFiles(e.dataTransfer.files); });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+}
+
+function paintRange({ id }) {
+  const c = CONTROLS[id]; if (!c) return;
+  c.input.style.setProperty('--p', ((c.input.value - c.row.min) / (c.row.max - c.row.min)) * 100 + '%');
+  c.val.textContent = c.row.show(S[id]);
+}
+
+function syncControls() {
+  for (const [id, c] of Object.entries(CONTROLS)) {
+    if (c.input) { c.input.value = c.row.write(S[id]); paintRange(c.row); }
+    else if (c.seg) c.row.options.forEach(([v], i) => c.seg.children[i].setAttribute('aria-pressed', String(v === S[id])));
+    else if (c.sw) { c.sw.setAttribute('aria-checked', String(!!S[id])); c.sw.lastChild.textContent = S[id] ? c.row.on : c.row.off; }
+  }
+  for (const key of Object.keys(PRESETS)) $('preset-' + key).setAttribute('aria-pressed', String(S.preset === key));
+  $('viewPs1').setAttribute('aria-pressed', String(S.view === 'ps1'));
+  $('viewOrig').setAttribute('aria-pressed', String(S.view === 'orig'));
+  $('spinBtn').setAttribute('aria-pressed', String(S.spin));
+  const anim = $('animGroup'), has = !!(model && model.clips.length);
+  anim.hidden = !has;
+  if (has) {
+    const sel = CONTROLS.clip.sel;
+    if (sel.options.length !== model.clips.length || sel.dataset.model !== model.name) {
+      sel.replaceChildren(...model.clips.map((c, i) => el('option', { value: i, text: c.name || 'Clip ' + (i + 1) })));
+      sel.dataset.model = model.name;
+    }
+    sel.value = S.clip;
+  }
+}
+
+const LEVEL = { tris: 0, texSize: 1, colors: 2, texDither: 2, grid: 3 };
+function change(id, value) {
+  S[id] = value;
+  if (PRESET_KEYS.includes(id)) S.preset = '';
+  for (const key of Object.keys(PRESETS)) $('preset-' + key).setAttribute('aria-pressed', String(S.preset === key));
+  if (id in LEVEL) schedule(LEVEL[id]);
+  else if (RENDER_KEYS.has(id)) applyRenderSettings();
+}
+
+let pendingLevel = 9, timer = 0;
+function schedule(level) {
+  pendingLevel = Math.min(pendingLevel, level);
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    const heavy = pendingLevel <= 1 && (S.texSize >= 256 || (model && model.triCount > 60000));
+    if (heavy) { $('led').className = 'led busy'; await nextFrame(); await nextFrame(); }
+    const lv = pendingLevel; pendingLevel = 9;
+    try { rebuild(lv); } catch (err) { console.error(err); setStatus('Conversion failed. ' + String(err.message || err), 'err'); return; }
+    $('led').className = 'led' + (ledState ? ' ' + ledState : '');
+  }, pendingLevel <= 1 ? 90 : 30);
+}
+
+function setView(v) { S.view = v; if (model) applyView(); syncControls(); }
+
+let ledState = '';
+function setStatus(text, kind = '') {
+  $('status').textContent = text; $('led').className = 'led' + (kind ? ' ' + kind : '');
+  ledState = kind;
+}
+function showVeil(text, drop = false) { const v = $('veil'); v.textContent = text; v.classList.toggle('drop', drop); v.hidden = false; }
+function hideVeil() { $('veil').hidden = true; }
+
+function refreshReadouts() {
+  if (!model || !page || !page.canvas) return;
+  const outTris = model.entries.reduce((sum, e) => sum + e.outTris, 0);
+  const bpp = S.colors === 16 ? 4 : S.colors === 256 ? 8 : S.colors === 32768 ? 16 : 24;
+  const bytes = (page.N * page.N * bpp) / 8 + (S.colors === 16 ? 32 : S.colors === 256 ? 512 : 0);
+  const kb = (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0);
+  const osd = $('osd');
+  if (S.view === 'ps1') {
+    osd.replaceChildren(
+      el('span', { class: 'tag', text: S.res }),
+      document.createTextNode('TRIS '), el('b', { text: fmt(outTris) }),
+      document.createTextNode(`  FROM ${fmt(model.triCount)}\nTEX  ${page.N}x${page.N} ${bpp}BIT ${kb}KB`),
+    );
+  } else {
+    osd.replaceChildren(el('span', { class: 'tag', text: 'ORIGINAL' }), document.createTextNode(`TRIS ${fmt(model.triCount)}`));
+  }
+  const pv = $('pageView');
+  pv.width = pv.height = page.N;
+  pv.getContext('2d').drawImage(page.canvas, 0, 0);
+  $('pageInfo').textContent = `${page.N}×${page.N} px, ${bpp}-bit`;
+  $('pageSub').textContent = `One texture page, re-baked from the original. ${kb} KB of the PS1’s 1 MB of video memory` + (S.colors === 0 ? ', though a real PS1 had no 24-bit textures.' : '.');
+  const clut = $('clut'), pal = page.palette;
+  clut.hidden = !pal;
+  if (pal) {
+    clut.className = 'clut' + (pal.length > 16 ? ' big' : '');
+    clut.replaceChildren(...pal.map((c) => { const i = document.createElement('i'); i.style.background = `rgb(${c[0]},${c[1]},${c[2]})`; return i; }));
+  }
+}
+
+/* =====================================================================
+   11. Frame loop
+   ===================================================================== */
+
+let lastT = 0;
+const hipPos = new THREE.Vector3();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - lastT) / 1000 || 0); lastT = now;
+  if (!model) return;
+  if (mixer) {
+    if (S.play) animT += dt;
+    mixer.setTime(S.fps > 0 ? Math.floor(animT * S.fps) / S.fps : animT);
+    if (model.rootMotion) {
+      // Keep walk and run cycles on the spot so the model stays in frame.
+      holder.position.copy(model.holderHome);
+      holder.updateMatrixWorld(true);
+      pivot.worldToLocal(model.hip.getWorldPosition(hipPos));
+      holder.position.x -= hipPos.x - model.hipHome.x; holder.position.z -= hipPos.z - model.hipHome.z;
+    }
+  }
+  if (S.spin) pivot.rotation.y += dt * 0.55;
+  controls.update();
+  if (S.view === 'ps1') {
+    renderer.setRenderTarget(rt); renderer.setClearColor(RAW_BG, 1); renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null); renderer.render(blitScene, blitCam);
+  } else {
+    renderer.setRenderTarget(null); renderer.setClearColor(ORIG_BG, 1); renderer.clear();
+    renderer.render(scene, camera);
+  }
+}
+
+/* =====================================================================
+   12. Boot
+   ===================================================================== */
+
+async function start(saved) {
+  if (saved && saved.S) S = { ...DEFAULTS, ...saved.S, view: 'ps1' };
+  buildInterface();
+  syncControls();
+  fitCanvas();
+  if (!inViewer()) $('exportNote').textContent = 'Mesh, rig, animation and textures in one .glb file.';
+  try {
+    await MeshoptSimplifier.ready;
+    if (!MeshoptSimplifier.supported) throw new Error('WebAssembly is not available');
+    loadSample();
+    requestAnimationFrame(frame);
+    getDownloads();
+  } catch (err) {
+    console.error(err);
+    setStatus('This browser cannot run the converter (it needs WebGL 2 and WebAssembly). ' + String(err.message || err), 'err');
+  }
+}
+
+// A handle for tinkering from the console.
+window.demaker = { rebuild, shaderFile, camera, controls, pivot, holder, scene, THREE, get state() { return S; }, get model() { return model; }, get page() { return page; }, openFiles, buildGLB, loadSample, setView, change, syncControls, renderer };
+const hot = window.claude && window.claude.hot;
+if (hot && hot.snapshot) hot.snapshot(() => ({ S }));
+if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+
+</script>
+</body>
+</html>
