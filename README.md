@@ -14,7 +14,7 @@
 - **Previews it the way the console drew it:** 320×240, vertices snapped to whole pixels, textures mapped without perspective correction, and the hardware's 4×4 dither pattern.
 - **Exports a `.glb`** with the mesh, skeleton, animations and texture.
 
-Four presets: Demake, PS1 '95, PS1 '99 and PS2 '01.
+Four presets: Demake, PS1 '95, PS1 '99 and PS2 '01. Hold **Space** (or the **Hold to compare** button) to flip to the original while you tune.
 
 Everything runs on your device. Your files are never uploaded.
 
